@@ -7,9 +7,8 @@
 struct EGL_ctx {
     EGLDisplay disp;
     EGLSurface surf;
-
-    Display *xdisp;
-    Window win;
+    EGLContext ctx;
+    EGLConfig config;
 };
 
 #endif //CTX_H

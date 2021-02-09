@@ -14,6 +14,7 @@ static void cleanup();
 
 static EGLConfig egl_choose_config(EGLDisplay disp);
 static bool egl_init();
+static bool egl_create_context(EGL_ctx *ctx_es);
 
 static Window x_create_window(int vis_id, int win_w, int win_h);
 static bool handle_xevent(XEvent *ev);
@@ -24,7 +25,7 @@ static bool keyboard(KeySym sym);
 
 // variables
 static EGL_ctx ctx_es;
-static EGL_ctx ctx_angle;
+//static EGL_ctx ctx_angle;
 
 static int xscr;
 static Display *xdpy;
@@ -75,20 +76,32 @@ init()
     if (!egl_init())
         return false;
 
-    EGLConfig config = egl_choose_config(ctx_es.disp);
-    if (!config)
+    ctx_es.config = egl_choose_config(ctx_es.disp);
+    if (!ctx_es.config)
         return false;
 
     EGLint vis_id;
-    eglGetConfigAttrib(ctx_es.disp, config, EGL_NATIVE_VISUAL_ID, &vis_id);
+    eglGetConfigAttrib(ctx_es.disp, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
 
     win = x_create_window(vis_id, 800, 600);
     if (!win)
         return false;
 
     // create an EGL surface
-    // create an EGL context
-    // create another EGL context ?
+    ctx_es.surf = eglCreateWindowSurface(ctx_es.disp, ctx_es.config, win, 0);
+    if (ctx_es.surf == EGL_NO_SURFACE) {
+        fprintf(stderr, "Failed to create EGL surface for win.\n");
+        return false;
+    }
+
+    eglBindAPI(EGL_OPENGL_ES_API);
+    if (!egl_create_context(&ctx_es))
+        return false;
+
+    if (eglGetError() != EGL_SUCCESS) {
+        fprintf(stderr, "EGL error detected.\n");
+        return false;
+    }
 
     return true;
 }
@@ -102,13 +115,12 @@ egl_init()
         return false;
     }
 
-    if (!eglInitialize(ctx_es.disp, 0, 0)) {
+    if (!eglInitialize(ctx_es.disp, NULL, NULL)) {
         fprintf(stderr, "Failed to initialize EGL.\n");
         return false;
     }
 
-    eglBindAPI(EGL_OPENGL_ES_API);
-    return true;
+    return (eglGetError() == EGL_SUCCESS);
 }
 
 static EGLConfig
@@ -118,10 +130,12 @@ egl_choose_config(EGLDisplay disp)
     EGLint attr_list[] = {
         EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RED_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_DEPTH_SIZE, 16,
+        EGL_STENCIL_SIZE, EGL_DONT_CARE,
         EGL_NONE
     };
 
@@ -133,6 +147,25 @@ egl_choose_config(EGLDisplay disp)
     }
 
     return config;
+}
+
+static bool
+egl_create_context(EGL_ctx *ctx_es)
+{
+    eglBindAPI(EGL_OPENGL_ES_API);
+
+    EGLint ctx_atts[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_NONE };
+
+    ctx_es->ctx = eglCreateContext(ctx_es->disp, ctx_es->config, /* shared_context_here */ EGL_NO_CONTEXT, ctx_atts);
+    if (!ctx_es->ctx) {
+        fprintf(stderr, "Failed to create EGL context.\n");
+        return false;
+    }
+
+    eglMakeCurrent(ctx_es->disp, ctx_es->surf, ctx_es->surf, ctx_es->ctx);
+    return (eglGetError() == EGL_SUCCESS);
 }
 
 Window
@@ -181,6 +214,8 @@ x_create_window(int vis_id, int win_w, int win_h)
     // Window manager protocols
     XSetWMProtocols(xdpy, win, &xa_wm_del_win, 1);
     XMapWindow(xdpy, win);
+    XSync(xdpy, 0);
+    XSync(xdpy, 0);
 
     return win;
 }
@@ -240,6 +275,10 @@ cleanup()
 static void
 display()
 {
+    glClearColor(1.0, 1.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    eglSwapBuffers(ctx_es.disp, ctx_es.surf);
 }
 
 static void
