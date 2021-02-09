@@ -19,6 +19,8 @@ static bool egl_create_context(EGL_ctx *ctx_es);
 static Window x_create_window(int vis_id, int win_w, int win_h);
 static bool handle_xevent(XEvent *ev);
 
+static bool gl_init();
+
 static void display();
 static void reshape(int w, int h);
 static bool keyboard(KeySym sym);
@@ -26,6 +28,9 @@ static bool keyboard(KeySym sym);
 // variables
 static EGL_ctx ctx_es;
 //static EGL_ctx ctx_angle;
+
+static GLuint gl_tex;
+static unsigned char *pixels;
 
 static int xscr;
 static Display *xdpy;
@@ -39,9 +44,13 @@ static bool redraw_pending;
 int main(int argc, char **argv)
 {
     if (!init()) {
-        fprintf(stderr, "Failed to initialize context.\n");
+        fprintf(stderr, "Failed to initialize EGL context.\n");
         return 1;
     }
+
+    eglMakeCurrent(ctx_es.disp, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
+    if (!gl_init())
+        return 1;
 
     // event loop
     for (;;) {
@@ -73,6 +82,7 @@ init()
     xa_wm_proto = XInternAtom(xdpy, "WM_PROTOCOLS", False);
     xa_wm_del_win = XInternAtom(xdpy, "WM_DELETE_WINDOW", False);
 
+    // EGL ctx
     if (!egl_init())
         return false;
 
@@ -80,14 +90,22 @@ init()
     if (!ctx_es.config)
         return false;
 
+    // NOTE to myself:
+    // This visual id that is taken by EGL and should match the angle visual
+    // but only here that I want the 2 contexts to share the same X window.
+    // WebKit is rendering to textures that are composited afterwards, so I won't
+    // have to care about it.
     EGLint vis_id;
     eglGetConfigAttrib(ctx_es.disp, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
 
+    // NOTE to myself:
+    // create x window: this is going to be used by both contexts
+    ////////////////////////////////////////////////////////////
     win = x_create_window(vis_id, 800, 600);
     if (!win)
         return false;
+    ////////////////////////////////////////////////////////////
 
-    // create an EGL surface
     ctx_es.surf = eglCreateWindowSurface(ctx_es.disp, ctx_es.config, win, 0);
     if (ctx_es.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create EGL surface for win.\n");
@@ -95,6 +113,7 @@ init()
     }
 
     eglBindAPI(EGL_OPENGL_ES_API);
+
     if (!egl_create_context(&ctx_es))
         return false;
 
@@ -164,7 +183,6 @@ egl_create_context(EGL_ctx *ctx_es)
         return false;
     }
 
-    eglMakeCurrent(ctx_es->disp, ctx_es->surf, ctx_es->surf, ctx_es->ctx);
     return (eglGetError() == EGL_SUCCESS);
 }
 
@@ -272,18 +290,39 @@ cleanup()
     eglTerminate(ctx_es.disp);
 }
 
+static bool
+gl_init()
+{
+    glGenTextures(1, &gl_tex);
+    glBindTexture(GL_TEXTURE_2D, gl_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, win_width, win_height, 0, GL_RGBA, GL_FLOAT, pixels);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+    return true; //glGetError() == GL_NO_ERROR;
+}
+
 static void
 display()
 {
+    // make the EGL context current
+    eglMakeCurrent(ctx_es.disp, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
+
     glClearColor(1.0, 1.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
     eglSwapBuffers(ctx_es.disp, ctx_es.surf);
+
+    // make the angle context current
 }
 
 static void
 reshape(int w, int h)
 {
+    // FIXME
+    //glViewport(0, 0, w, h);
 }
 
 static bool
