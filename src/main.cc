@@ -1,3 +1,30 @@
+/*
+ * Copyright © 2021 Igalia S.L.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * Author:
+ *    Eleni Maria Stea <estea@igalia.com>
+ */
+
+
 #include <EGL/egl.h>
 #include <GLES3/gl32.h>
 
@@ -20,7 +47,6 @@ static bool egl_create_context(EGL_ctx *ctx_es);
 static Window x_create_window(int vis_id, int win_w, int win_h);
 static bool handle_xevent(XEvent *ev);
 
-static bool check_bound_fbo_status();
 static bool gl_init();
 static void gl_cleanup();
 
@@ -36,6 +62,7 @@ static GLuint gl_tex;
 static unsigned int gl_prog;
 static GLuint gl_fbo;
 static GLuint gl_rbo;
+static GLuint gl_vbo;
 
 static int xscr;
 static Display *xdpy;
@@ -300,38 +327,34 @@ cleanup()
 }
 
 static bool
-check_bound_fbo_status()
-{
-	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-	if (status != GL_FRAMEBUFFER_COMPLETE) {
-		switch(status) {
-		case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT\n");
-			break;
-		case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
-			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS\n");
-			break;
-		case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT\n");
-			break;
-		case GL_FRAMEBUFFER_UNSUPPORTED:
-			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_UNSUPPORTED\n");
-			break;
-		default:
-			fprintf(stderr, "GL FBO status: Unknown\n");
-		}
-		return false;
-	}
-	return true;
-}
-
-static bool
 gl_init()
 {
-    gl_prog = create_program_load("data/xor.vert", "data/xor.frag");
+	static const float vertices[] = {
+		1.0, 1.0,
+		1.0, 0.0,
+		0.0, 1.0,
+		0.0, 0.0
+	};
 
-    glGenFramebuffers(1, &gl_fbo);
-    glGenRenderbuffers(1, &gl_rbo);
+	glGenBuffers(1, &gl_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STATIC_DRAW);
+
+	// xor image
+	unsigned char pixels[256 * 256 * 4];
+	unsigned char *pptr = pixels;
+	for (int i = 0; i < 256; i++) {
+		for (int j = 0; j < 256; j++) {
+			int r = (i ^ j);
+			int g = (i ^ j) << 1;
+			int b = (i ^ j) << 2;
+
+			*pptr++ = r;
+			*pptr++ = g;
+			*pptr++ = b;
+			*pptr++ = 255;
+		}
+	}
 
     glGenTextures(1, &gl_tex);
     glBindTexture(GL_TEXTURE_2D, gl_tex);
@@ -339,30 +362,10 @@ gl_init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, gl_fbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, gl_rbo);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
-                          win_width, win_height);
-
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER,
-                              GL_DEPTH_STENCIL_ATTACHMENT,
-                              GL_RENDERBUFFER, gl_rbo);
-
-    glFramebufferTexture2D(GL_FRAMEBUFFER,
-                           GL_COLOR_ATTACHMENT0,
-                           GL_TEXTURE_2D, gl_tex, 0);
-
-    if (!check_bound_fbo_status())
-        return false;
-
+    gl_prog = create_program_load("data/texmap.vert", "data/texmap.frag");
     glClearColor(1.0, 1.0, 0.0, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
 
     return glGetError() == GL_NO_ERROR;
 }
@@ -386,8 +389,15 @@ display()
     // make the EGL context current
     eglMakeCurrent(ctx_es.disp, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
 
-    glClearColor(1.0, 1.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
+	bind_program(gl_prog);
+	glBindTexture(GL_TEXTURE_2D, gl_tex);
+	glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     eglSwapBuffers(ctx_es.disp, ctx_es.surf);
 
@@ -397,8 +407,7 @@ display()
 static void
 reshape(int w, int h)
 {
-// FIXME
-//glViewport(0, 0, w, h);
+	glViewport(0, 0, w, h);
 }
 
 static bool
