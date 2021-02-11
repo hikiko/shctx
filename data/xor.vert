@@ -1,5 +1,4 @@
-#version 430
-#extension GL_ARB_separate_shader_objects : enable
+#version 310
 
 const vec2 vdata[] = vec2[] (
       vec2(1.0, 1.0),

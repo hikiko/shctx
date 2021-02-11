@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <assert.h>
-#include "GLES3/gl32.h"
+#include <GLES3/gl32.h>
 
 #if defined(unix) || defined(__unix__)
 #include <unistd.h>

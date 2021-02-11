@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include "ctx.h"
+#include "sdr.h"
 
 // functions
 static bool init();
@@ -19,7 +20,9 @@ static bool egl_create_context(EGL_ctx *ctx_es);
 static Window x_create_window(int vis_id, int win_w, int win_h);
 static bool handle_xevent(XEvent *ev);
 
+static bool check_bound_fbo_status();
 static bool gl_init();
+static void gl_cleanup();
 
 static void display();
 static void reshape(int w, int h);
@@ -30,7 +33,9 @@ static EGL_ctx ctx_es;
 //static EGL_ctx ctx_angle;
 
 static GLuint gl_tex;
-static unsigned char *pixels;
+static unsigned int gl_prog;
+static GLuint gl_fbo;
+static GLuint gl_rbo;
 
 static int xscr;
 static Display *xdpy;
@@ -233,7 +238,6 @@ x_create_window(int vis_id, int win_w, int win_h)
     XSetWMProtocols(xdpy, win, &xa_wm_del_win, 1);
     XMapWindow(xdpy, win);
     XSync(xdpy, 0);
-    XSync(xdpy, 0);
 
     return win;
 }
@@ -287,21 +291,93 @@ handle_xevent(XEvent *ev)
 static void
 cleanup()
 {
+    gl_cleanup();
+    // FIXME
+    // destroy context, surface, display
+    // FIXME
+    // destroy x window x dpy
     eglTerminate(ctx_es.disp);
+}
+
+static bool
+check_bound_fbo_status()
+{
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		switch(status) {
+		case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT\n");
+			break;
+		case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
+			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS\n");
+			break;
+		case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT\n");
+			break;
+		case GL_FRAMEBUFFER_UNSUPPORTED:
+			fprintf(stderr, "GL FBO status: GL_FRAMEBUFFER_UNSUPPORTED\n");
+			break;
+		default:
+			fprintf(stderr, "GL FBO status: Unknown\n");
+		}
+		return false;
+	}
+	return true;
 }
 
 static bool
 gl_init()
 {
+    gl_prog = create_program_load("data/xor.vert", "data/xor.frag");
+
+    glGenFramebuffers(1, &gl_fbo);
+    glGenRenderbuffers(1, &gl_rbo);
+
     glGenTextures(1, &gl_tex);
     glBindTexture(GL_TEXTURE_2D, gl_tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, win_width, win_height, 0, GL_RGBA, GL_FLOAT, pixels);
-	glBindTexture(GL_TEXTURE_2D, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    return true; //glGetError() == GL_NO_ERROR;
+    glBindFramebuffer(GL_FRAMEBUFFER, gl_fbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, gl_rbo);
+
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+                          win_width, win_height);
+
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER,
+                              GL_DEPTH_STENCIL_ATTACHMENT,
+                              GL_RENDERBUFFER, gl_rbo);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER,
+                           GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, gl_tex, 0);
+
+    if (!check_bound_fbo_status())
+        return false;
+
+    glClearColor(1.0, 1.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return glGetError() == GL_NO_ERROR;
+}
+
+static void
+gl_cleanup()
+{
+    free_program(gl_prog);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDeleteTextures(1, &gl_tex);
+    glDeleteProgram(gl_prog);
+
+    glDeleteFramebuffers(1, &gl_fbo);
+    glDeleteRenderbuffers(1, &gl_rbo);
 }
 
 static void
@@ -321,18 +397,18 @@ display()
 static void
 reshape(int w, int h)
 {
-    // FIXME
-    //glViewport(0, 0, w, h);
+// FIXME
+//glViewport(0, 0, w, h);
 }
 
 static bool
 keyboard(KeySym sym)
 {
     switch (sym) {
-    case XK_Escape:
-        return false;
-    default:
-        break;
+        case XK_Escape:
+            return false;
+        default:
+            break;
     }
     return true;
 }
