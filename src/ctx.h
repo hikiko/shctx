@@ -31,8 +31,6 @@
 #include <X11/Xlib.h>
 
 struct EGL_ctx {
-    EGLDisplay disp;
-    EGLSurface surf;
     EGLContext ctx;
     EGLConfig config;
 };
