@@ -4,13 +4,15 @@ obj = $(src:.cc=.o) $(csrc:.c=.o)
 dep = $(src:.cc=.d) $(csrc:.c=.d)
 bin = shctx
 
-lib = -L/home/eleni/igalia/install/lib
+libpath = /home/eleni/igalia/code/angle/out/Debug
+lib = -L$(libpath) -Wl,-rpath=$(libpath)
 inc = -I/home/eleni/igalia/install/include
 
 CXXFLAGS = -pedantic -Wall -g $(inc) -MMD
-LDFLAGS = $(lib) -lGLESv2 -lEGL -lX11
+LIBS = $(lib) -lGLESv2 -lEGL
+LDFLAGS = -lX11 $(LIBS)
 
-$(bin): $(obj)
+$(bin): $(obj) Makefile
 	$(CXX) -o $@ $(obj) $(LDFLAGS)
 
 -include $(dep)

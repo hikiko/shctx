@@ -159,6 +159,7 @@ init()
 		return false;
 	}
 
+	redraw_pending = true;
     return true;
 }
 
@@ -166,7 +167,10 @@ static bool
 egl_init()
 {
     // create an EGL display
-    if ((egl_dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
+	if ((egl_dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+	// NOTE to myself:
+	// following line I used in EGL/GLES2 example causes error in angle (see extensions):
+    //if ((egl_dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get EGL display.\n");
         return false;
     }
