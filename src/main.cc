@@ -45,6 +45,7 @@ static void cleanup();
 static EGLConfig egl_choose_config();
 static bool egl_init();
 static bool egl_create_context(EGL_ctx *ctx, EGLContext shared);
+static bool angle_egl_create_context(EGL_ctx *ctx, EGLContext shared);
 
 static Window x_create_window(int vis_id, int win_w, int win_h);
 static bool handle_xevent(XEvent *ev);
@@ -83,7 +84,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    angle_eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
+    eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
     if (!gl_init())
         return 1;
 
@@ -135,7 +136,7 @@ init()
     // On WebKit we will draw to textures so we won't need to mess with
     // visuals. For THIS test, we are going to use the same visual in angle.
     EGLint vis_id;
-    angle_eglGetConfigAttrib(egl_dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
+    eglGetConfigAttrib(egl_dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
 
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
@@ -146,7 +147,7 @@ init()
     ////////////////////////////////////////////////////////////
 
     /* create EGL/ES surface */
-    egl_surf = angle_eglCreateWindowSurface(egl_dpy, ctx_es.config, win, 0);
+    egl_surf = eglCreateWindowSurface(egl_dpy, ctx_es.config, win, 0);
     if (egl_surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create EGL surface for win.\n");
         return false;
@@ -159,7 +160,7 @@ init()
 
     ctx_angle.config = ctx_es.config;
     /* create ANGLE context */
-    if (!egl_create_context(&ctx_angle, ctx_es.ctx)) {
+    if (!angle_egl_create_context(&ctx_angle, ctx_es.ctx)) {
         return false;
     }
 
@@ -171,7 +172,7 @@ static bool
 egl_init()
 {
     // create an EGL display
-    if ((egl_dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+    if ((egl_dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
     // NOTE to myself:
     // following line I used in EGL/GLES2 example causes error in angle (see extensions):
     //if ((egl_dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
@@ -179,14 +180,14 @@ egl_init()
         return false;
     }
 
-    if (!angle_eglInitialize(egl_dpy, NULL, NULL)) {
+    if (!eglInitialize(egl_dpy, NULL, NULL)) {
         fprintf(stderr, "Failed to initialize EGL.\n");
         return false;
     }
 
-    angle_eglBindAPI(EGL_OPENGL_ES_API);
+    eglBindAPI(EGL_OPENGL_ES_API);
 
-    return (angle_eglGetError() == EGL_SUCCESS);
+    return (eglGetError() == EGL_SUCCESS);
 }
 
 static EGLConfig
@@ -207,12 +208,29 @@ egl_choose_config()
 
     EGLConfig config;
     EGLint num_configs;
-    if (!angle_eglChooseConfig(egl_dpy, attr_list, &config, 1, &num_configs)) {
+    if (!eglChooseConfig(egl_dpy, attr_list, &config, 1, &num_configs)) {
         fprintf(stderr, "Failed to find a suitable EGL config.\n");
         return 0;
     }
 
     return config;
+}
+
+static bool
+angle_egl_create_context(EGL_ctx *ctx, EGLContext shared)
+{
+    EGLint ctx_atts[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_NONE };
+
+    ctx->ctx = angle_eglCreateContext(egl_dpy, ctx->config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+
+    if (!ctx->ctx) {
+        fprintf(stderr, "Failed to create EGL context.\n");
+        return false;
+    }
+
+    return (angle_eglGetError() == EGL_SUCCESS);
 }
 
 static bool
@@ -222,7 +240,8 @@ egl_create_context(EGL_ctx *ctx, EGLContext shared)
         EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE };
 
-    ctx->ctx = angle_eglCreateContext(egl_dpy, ctx->config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+    ctx->ctx = eglCreateContext(egl_dpy, ctx->config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+
     if (!ctx->ctx) {
         fprintf(stderr, "Failed to create EGL context.\n");
         return false;
@@ -334,7 +353,7 @@ cleanup()
     gl_cleanup();
     // FIXME EGL
     // destroy context, surface, display
-    angle_eglTerminate(egl_dpy);
+    eglTerminate(egl_dpy);
 
     XDestroyWindow(xdpy, win);
     XCloseDisplay(xdpy);
@@ -344,7 +363,7 @@ static bool
 gl_init()
 {
     // Context that draws
-    angle_eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
+    eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
     static const float vertices[] = {
         1.0, 1.0,
         1.0, 0.0,
@@ -352,12 +371,12 @@ gl_init()
         0.0, 0.0
     };
 
-    angle_glGenBuffers(1, &gl_vbo);
-    angle_glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
-    angle_glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STATIC_DRAW);
+    glGenBuffers(1, &gl_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STATIC_DRAW);
 
     gl_prog = create_program_load("data/texmap.vert", "data/texmap.frag");
-    angle_glClearColor(1.0, 1.0, 0.0, 1.0);
+    glClearColor(1.0, 1.0, 0.0, 1.0);
 
     // Context that creates the image
     angle_eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_angle.ctx);
@@ -386,7 +405,6 @@ gl_init()
     angle_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     angle_glFinish();
 
-
     return angle_glGetError() == GL_NO_ERROR;
 }
 
@@ -397,32 +415,32 @@ gl_cleanup()
     angle_glBindTexture(GL_TEXTURE_2D, 0);
 
     angle_glDeleteTextures(1, &gl_tex);
-    angle_glDeleteProgram(gl_prog);
+    free_program(gl_prog);
 }
 
 static void
 display()
 {
     // make the EGL context current
-    angle_eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
+    eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
 
-    angle_glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
     bind_program(gl_prog);
-    angle_glBindTexture(GL_TEXTURE_2D, gl_tex);
-    angle_glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
-    angle_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    angle_glEnableVertexAttribArray(0);
-    angle_glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, gl_tex);
+    glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    angle_glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    angle_eglSwapBuffers(egl_dpy, egl_surf);
+    eglSwapBuffers(egl_dpy, egl_surf);
 }
 
 static void
 reshape(int w, int h)
 {
-    angle_glViewport(0, 0, w, h);
+    glViewport(0, 0, w, h);
 }
 
 static bool
