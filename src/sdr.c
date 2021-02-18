@@ -5,13 +5,14 @@
  * This code is placed in the public domain
  */
 
-#include <GLES3/gl32.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <assert.h>
+
+#include "mygl.h"
 
 #if defined(unix) || defined(__unix__)
 #include <unistd.h>
@@ -78,23 +79,23 @@ unsigned int create_shader(const char *src, unsigned int sdr_type)
 		src_str[src_str_count++] = footer;
 	}
 
-	sdr = glCreateShader(sdr_type);
-	assert(glGetError() == GL_NO_ERROR);
-	glShaderSource(sdr, src_str_count, src_str, 0);
-	err = glGetError();
+	sdr = angle_glCreateShader(sdr_type);
+	assert(angle_glGetError() == GL_NO_ERROR);
+	angle_glShaderSource(sdr, src_str_count, src_str, 0);
+	err = angle_glGetError();
 	assert(err == GL_NO_ERROR);
-	glCompileShader(sdr);
-	assert(glGetError() == GL_NO_ERROR);
+	angle_glCompileShader(sdr);
+	assert(angle_glGetError() == GL_NO_ERROR);
 
-	glGetShaderiv(sdr, GL_COMPILE_STATUS, &success);
-	assert(glGetError() == GL_NO_ERROR);
-	glGetShaderiv(sdr, GL_INFO_LOG_LENGTH, &info_len);
-	assert(glGetError() == GL_NO_ERROR);
+	angle_glGetShaderiv(sdr, GL_COMPILE_STATUS, &success);
+	assert(angle_glGetError() == GL_NO_ERROR);
+	angle_glGetShaderiv(sdr, GL_INFO_LOG_LENGTH, &info_len);
+	assert(angle_glGetError() == GL_NO_ERROR);
 
 	if(info_len) {
 		if((info_str = malloc(info_len + 1))) {
-			glGetShaderInfoLog(sdr, info_len, 0, info_str);
-			assert(glGetError() == GL_NO_ERROR);
+			angle_glGetShaderInfoLog(sdr, info_len, 0, info_str);
+			assert(angle_glGetError() == GL_NO_ERROR);
 			info_str[info_len] = 0;
 		}
 	}
@@ -103,7 +104,7 @@ unsigned int create_shader(const char *src, unsigned int sdr_type)
 		fprintf(stderr, info_str ? "done: %s\n" : "done\n", info_str);
 	} else {
 		fprintf(stderr, info_str ? "failed: %s\n" : "failed\n", info_str);
-		glDeleteShader(sdr);
+		angle_glDeleteShader(sdr);
 		sdr = 0;
 	}
 
@@ -113,7 +114,7 @@ unsigned int create_shader(const char *src, unsigned int sdr_type)
 
 void free_shader(unsigned int sdr)
 {
-	glDeleteShader(sdr);
+	angle_glDeleteShader(sdr);
 }
 
 unsigned int load_vertex_shader(const char *fname)
@@ -189,8 +190,8 @@ unsigned int load_shader(const char *fname, unsigned int sdr_type)
 
 unsigned int create_program(void)
 {
-	unsigned int prog = glCreateProgram();
-	assert(glGetError() == GL_NO_ERROR);
+	unsigned int prog = angle_glCreateProgram();
+	assert(angle_glGetError() == GL_NO_ERROR);
 	return prog;
 }
 
@@ -204,14 +205,14 @@ unsigned int create_program_link(unsigned int sdr0, ...)
 	}
 
 	attach_shader(prog, sdr0);
-	if(glGetError()) {
+	if(angle_glGetError()) {
 		return 0;
 	}
 
 	va_start(ap, sdr0);
 	while((sdr = va_arg(ap, unsigned int))) {
 		attach_shader(prog, sdr);
-		if(glGetError()) {
+		if(angle_glGetError()) {
 			return 0;
 		}
 	}
@@ -239,7 +240,7 @@ unsigned int create_program_load(const char *vfile, const char *pfile)
 
 void free_program(unsigned int sdr)
 {
-	glDeleteProgram(sdr);
+	angle_glDeleteProgram(sdr);
 }
 
 void attach_shader(unsigned int prog, unsigned int sdr)
@@ -247,9 +248,9 @@ void attach_shader(unsigned int prog, unsigned int sdr)
 	int err;
 
 	if(prog && sdr) {
-		assert(glGetError() == GL_NO_ERROR);
-		glAttachShader(prog, sdr);
-		if((err = glGetError()) != GL_NO_ERROR) {
+		assert(angle_glGetError() == GL_NO_ERROR);
+		angle_glAttachShader(prog, sdr);
+		if((err = angle_glGetError()) != GL_NO_ERROR) {
 			fprintf(stderr, "failed to attach shader %u to program %u (err: 0x%x)\n", sdr, prog, err);
 			abort();
 		}
@@ -261,17 +262,17 @@ int link_program(unsigned int prog)
 	int linked, info_len, retval = 0;
 	char *info_str = 0;
 
-	glLinkProgram(prog);
-	assert(glGetError() == GL_NO_ERROR);
-	glGetProgramiv(prog, GL_LINK_STATUS, &linked);
-	assert(glGetError() == GL_NO_ERROR);
-	glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &info_len);
-	assert(glGetError() == GL_NO_ERROR);
+	angle_glLinkProgram(prog);
+	assert(angle_glGetError() == GL_NO_ERROR);
+	angle_glGetProgramiv(prog, GL_LINK_STATUS, &linked);
+	assert(angle_glGetError() == GL_NO_ERROR);
+	angle_glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &info_len);
+	assert(angle_glGetError() == GL_NO_ERROR);
 
 	if(info_len) {
 		if((info_str = malloc(info_len + 1))) {
-			glGetProgramInfoLog(prog, info_len, 0, info_str);
-			assert(glGetError() == GL_NO_ERROR);
+			angle_glGetProgramInfoLog(prog, info_len, 0, info_str);
+			assert(angle_glGetError() == GL_NO_ERROR);
 			info_str[info_len] = 0;
 		}
 	}
@@ -291,15 +292,15 @@ int bind_program(unsigned int prog)
 {
 	GLenum err;
 
-	glUseProgram(prog);
-	if(prog && (err = glGetError()) != GL_NO_ERROR) {
+	angle_glUseProgram(prog);
+	if(prog && (err = angle_glGetError()) != GL_NO_ERROR) {
 		/* maybe the program is not linked, try linking first */
 		if(err == GL_INVALID_OPERATION) {
 			if(link_program(prog) == -1) {
 				return -1;
 			}
-			glUseProgram(prog);
-			return glGetError() == GL_NO_ERROR ? 0 : -1;
+			angle_glUseProgram(prog);
+			return angle_glGetError() == GL_NO_ERROR ? 0 : -1;
 		}
 		return -1;
 	}
@@ -309,11 +310,11 @@ int bind_program(unsigned int prog)
 /* ugly but I'm not going to write the same bloody code over and over */
 #define BEGIN_UNIFORM_CODE \
 	int loc, curr_prog; \
-	glGetIntegerv(GL_CURRENT_PROGRAM, &curr_prog); \
+	angle_glGetIntegerv(GL_CURRENT_PROGRAM, &curr_prog); \
 	if((unsigned int)curr_prog != prog && bind_program(prog) == -1) { \
 		return -1; \
 	} \
-	if((loc = glGetUniformLocation(prog, name)) != -1)
+	if((loc = angle_glGetUniformLocation(prog, name)) != -1)
 
 #define END_UNIFORM_CODE \
 	if((unsigned int)curr_prog != prog) { \
@@ -324,11 +325,11 @@ int bind_program(unsigned int prog)
 int get_uniform_loc(unsigned int prog, const char *name)
 {
 	int loc, curr_prog;
-	glGetIntegerv(GL_CURRENT_PROGRAM, &curr_prog);
+	angle_glGetIntegerv(GL_CURRENT_PROGRAM, &curr_prog);
 	if((unsigned int)curr_prog != prog && bind_program(prog) == -1) {
 		return -1;
 	}
-	loc = glGetUniformLocation(prog, name);
+	loc = angle_glGetUniformLocation(prog, name);
 	if((unsigned int)curr_prog != prog) {
 		bind_program(curr_prog);
 	}
@@ -338,55 +339,7 @@ int get_uniform_loc(unsigned int prog, const char *name)
 int set_uniform_int(unsigned int prog, const char *name, int val)
 {
 	BEGIN_UNIFORM_CODE {
-		glUniform1i(loc, val);
-	}
-	END_UNIFORM_CODE;
-}
-
-int set_uniform_float(unsigned int prog, const char *name, float val)
-{
-	BEGIN_UNIFORM_CODE {
-		glUniform1f(loc, val);
-	}
-	END_UNIFORM_CODE;
-}
-
-int set_uniform_float2(unsigned int prog, const char *name, float x, float y)
-{
-	BEGIN_UNIFORM_CODE {
-		glUniform2f(loc, x, y);
-	}
-	END_UNIFORM_CODE;
-}
-
-int set_uniform_float3(unsigned int prog, const char *name, float x, float y, float z)
-{
-	BEGIN_UNIFORM_CODE {
-		glUniform3f(loc, x, y, z);
-	}
-	END_UNIFORM_CODE;
-}
-
-int set_uniform_float4(unsigned int prog, const char *name, float x, float y, float z, float w)
-{
-	BEGIN_UNIFORM_CODE {
-		glUniform4f(loc, x, y, z, w);
-	}
-	END_UNIFORM_CODE;
-}
-
-int set_uniform_matrix4(unsigned int prog, const char *name, const float *mat)
-{
-	BEGIN_UNIFORM_CODE {
-		glUniformMatrix4fv(loc, 1, GL_FALSE, mat);
-	}
-	END_UNIFORM_CODE;
-}
-
-int set_uniform_matrix4_transposed(unsigned int prog, const char *name, const float *mat)
-{
-	BEGIN_UNIFORM_CODE {
-		glUniformMatrix4fv(loc, 1, GL_TRUE, mat);
+		angle_glUniform1i(loc, val);
 	}
 	END_UNIFORM_CODE;
 }
@@ -395,22 +348,17 @@ int get_attrib_loc(unsigned int prog, const char *name)
 {
 	int loc, curr_prog;
 
-	glGetIntegerv(GL_CURRENT_PROGRAM, &curr_prog);
+	angle_glGetIntegerv(GL_CURRENT_PROGRAM, &curr_prog);
 	if((unsigned int)curr_prog != prog && bind_program(prog) == -1) {
 		return -1;
 	}
 
-	loc = glGetAttribLocation(prog, (char*)name);
+	loc = angle_glGetAttribLocation(prog, (char*)name);
 
 	if((unsigned int)curr_prog != prog) {
 		bind_program(curr_prog);
 	}
 	return loc;
-}
-
-void set_attrib_float3(int attr_loc, float x, float y, float z)
-{
-	glVertexAttrib3f(attr_loc, x, y, z);
 }
 
 /* ---- shader composition ---- */
@@ -530,19 +478,6 @@ static const char *sdrtypestr(unsigned int sdrtype)
 		return "vertex";
 	case GL_FRAGMENT_SHADER:
 		return "pixel";
-#ifdef GL_TESS_CONTROL_SHADER
-	case GL_TESS_CONTROL_SHADER:
-		return "tessellation control";
-#endif
-#ifdef GL_TESS_EVALUATION_SHADER
-	case GL_TESS_EVALUATION_SHADER:
-		return "tessellation evaluation";
-#endif
-#ifdef GL_GEOMETRY_SHADER
-	case GL_GEOMETRY_SHADER:
-		return "geometry";
-#endif
-
 	default:
 		break;
 	}
@@ -556,12 +491,6 @@ static int sdrtypeidx(unsigned int sdrtype)
 		return 0;
 	case GL_FRAGMENT_SHADER:
 		return 1;
-	case GL_TESS_CONTROL_SHADER:
-		return 2;
-	case GL_TESS_EVALUATION_SHADER:
-		return 3;
-	case GL_GEOMETRY_SHADER:
-		return 4;
 	default:
 		break;
 	}

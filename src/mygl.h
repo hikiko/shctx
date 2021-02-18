@@ -1,0 +1,60 @@
+#ifndef MYGL_H_
+#define MYGL_H_
+
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+
+extern PFNEGLMAKECURRENTPROC angle_eglMakeCurrent;
+extern PFNEGLGETCONFIGATTRIBPROC angle_eglGetConfigAttrib;
+extern PFNEGLCREATEWINDOWSURFACEPROC angle_eglCreateWindowSurface;
+extern PFNEGLGETDISPLAYPROC angle_eglGetDisplay;
+extern PFNEGLINITIALIZEPROC angle_eglInitialize;
+extern PFNEGLBINDAPIPROC angle_eglBindAPI;
+extern PFNEGLGETERRORPROC angle_eglGetError;
+extern PFNEGLCHOOSECONFIGPROC angle_eglChooseConfig;
+extern PFNEGLCREATECONTEXTPROC angle_eglCreateContext;
+extern PFNEGLTERMINATEPROC angle_eglTerminate;
+extern PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
+
+extern PFNGLGENBUFFERSPROC angle_glGenBuffers;
+extern PFNGLBINDBUFFERPROC angle_glBindBuffer;
+extern PFNGLBUFFERDATAPROC angle_glBufferData;
+extern PFNGLCLEARCOLORPROC angle_glClearColor;
+extern PFNGLGENTEXTURESPROC angle_glGenTextures;
+extern PFNGLBINDTEXTUREPROC angle_glBindTexture;
+extern PFNGLTEXPARAMETERIPROC angle_glTexParameteri;
+extern PFNGLTEXIMAGE2DPROC angle_glTexImage2D;
+extern PFNGLFINISHPROC angle_glFinish;
+extern PFNGLGETERRORPROC angle_glGetError;
+extern PFNGLDELETETEXTURESPROC angle_glDeleteTextures;
+extern PFNGLDELETEPROGRAMPROC angle_glDeleteProgram;
+extern PFNGLCLEARPROC angle_glClear;
+extern PFNGLVERTEXATTRIBPOINTERPROC angle_glVertexAttribPointer;
+extern PFNGLENABLEVERTEXATTRIBARRAYPROC angle_glEnableVertexAttribArray;
+extern PFNGLDRAWARRAYSPROC angle_glDrawArrays;
+extern PFNGLVIEWPORTPROC angle_glViewport;
+extern PFNGLCREATESHADERPROC angle_glCreateShader;
+extern PFNGLCREATEPROGRAMPROC angle_glCreateProgram;
+extern PFNGLGETUNIFORMLOCATIONPROC angle_glGetUniformLocation;
+extern PFNGLGETATTRIBLOCATIONPROC angle_glGetAttribLocation;
+extern PFNGLSHADERSOURCEPROC angle_glShaderSource;
+extern PFNGLCOMPILESHADERPROC angle_glCompileShader;
+extern PFNGLGETSHADERIVPROC angle_glGetShaderiv;
+extern PFNGLGETSHADERINFOLOGPROC angle_glGetShaderInfoLog;
+extern PFNGLDELETESHADERPROC angle_glDeleteShader;
+extern PFNGLATTACHSHADERPROC angle_glAttachShader;
+extern PFNGLLINKPROGRAMPROC angle_glLinkProgram;
+extern PFNGLGETPROGRAMIVPROC angle_glGetProgramiv;
+extern PFNGLGETPROGRAMINFOLOGPROC angle_glGetProgramInfoLog;
+extern PFNGLUSEPROGRAMPROC angle_glUseProgram;
+extern PFNGLGETINTEGERVPROC angle_glGetIntegerv;
+extern PFNGLUNIFORM1IPROC angle_glUniform1i;
+
+#ifdef __cplusplus
+bool mygl_init();
+#endif
+
+//extern PFNGLDELETEFRAMEBUFFERSPROC angle_glDeleteFramebuffers;
+//extern PFNGLDELETERENDERBUFFERSPROC angle_glDeleteRenderbuffers;
+
+#endif // MYGL_H_
