@@ -26,7 +26,7 @@
 
 
 #include <EGL/egl.h>
-#include <GLES3/gl32.h>
+#include <GLES2/gl2.h>
 
 #include <X11/Xlib.h>
 
@@ -144,7 +144,7 @@ init()
         return false;
     }
 
-    eglBindAPI(EGL_OPENGL_ES_API);
+    eglBindAPI(EGL_OPENGL_ES2_BIT);
 
     if (!egl_create_context(&ctx_es))
         return false;
@@ -154,6 +154,7 @@ init()
         return false;
     }
 
+	redraw_pending = true;
     return true;
 }
 
@@ -300,6 +301,7 @@ handle_xevent(XEvent *ev)
         }
         break;
     case Expose:
+		printf("exposed\n");
         if (mapped)
             redraw_pending = true;
         break;
@@ -400,8 +402,6 @@ display()
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     eglSwapBuffers(ctx_es.disp, ctx_es.surf);
-
-    // make the angle context current
 }
 
 static void

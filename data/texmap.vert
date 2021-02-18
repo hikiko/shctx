@@ -1,4 +1,4 @@
-#version 310 es
+#version 300 es
 layout(location = 0) in vec2 vertex;
 out vec2 uvc;
 void main()

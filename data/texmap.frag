@@ -1,4 +1,4 @@
-#version 310 es
+#version 300 es
 
 layout(location = 0) out mediump vec4 fcolor;
 in mediump vec2 uvc;
