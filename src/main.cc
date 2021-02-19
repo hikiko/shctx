@@ -43,9 +43,10 @@ static bool init();
 static void cleanup();
 
 static EGLConfig egl_choose_config();
+static EGLConfig angle_egl_choose_config();
 static bool egl_init();
-static bool egl_create_context(EGL_ctx *ctx, EGLContext shared);
-static bool angle_egl_create_context(EGL_ctx *ctx, EGLContext shared);
+static bool egl_create_context(EGLContext shared);
+static bool angle_egl_create_context(EGLContext shared);
 
 static Window x_create_window(int vis_id, int win_w, int win_h);
 static bool handle_xevent(XEvent *ev);
@@ -58,7 +59,6 @@ static void reshape(int w, int h);
 static bool keyboard(KeySym sym);
 
 // variables
-static EGLDisplay egl_dpy;
 static EGLSurface egl_surf;
 
 static EGL_ctx ctx_es;
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
+    eglMakeCurrent(ctx_es.dpy, egl_surf, egl_surf, ctx_es.ctx);
     if (!gl_init())
         return 1;
 
@@ -133,10 +133,15 @@ init()
         return false;
     }
 
+	ctx_angle.config = angle_egl_choose_config();
+	if (!ctx_angle.config) {
+		return false;
+	}
+
     // On WebKit we will draw to textures so we won't need to mess with
     // visuals. For THIS test, we are going to use the same visual in angle.
     EGLint vis_id;
-    eglGetConfigAttrib(egl_dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
+    eglGetConfigAttrib(ctx_es.dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
 
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
@@ -147,20 +152,19 @@ init()
     ////////////////////////////////////////////////////////////
 
     /* create EGL/ES surface */
-    egl_surf = eglCreateWindowSurface(egl_dpy, ctx_es.config, win, 0);
+    egl_surf = eglCreateWindowSurface(ctx_es.dpy, ctx_es.config, win, 0);
     if (egl_surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create EGL surface for win.\n");
         return false;
     }
 
     /* create EGL context */
-    if (!egl_create_context(&ctx_es, 0)) {
+    if (!egl_create_context(0)) {
         return false;
     }
 
-    ctx_angle.config = ctx_es.config;
     /* create ANGLE context */
-    if (!angle_egl_create_context(&ctx_angle, ctx_es.ctx)) {
+    if (!angle_egl_create_context(ctx_es.ctx)) {
         return false;
     }
 
@@ -172,43 +176,56 @@ static bool
 egl_init()
 {
     // create an EGL display
-    if ((egl_dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+    if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
     // NOTE to myself:
     // following line I used in EGL/GLES2 example causes error in angle (see extensions):
-    //if ((egl_dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
+    //if ((ctx_es.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get EGL display.\n");
         return false;
     }
 
-    if (!eglInitialize(egl_dpy, NULL, NULL)) {
+    if (!eglInitialize(ctx_es.dpy, NULL, NULL)) {
         fprintf(stderr, "Failed to initialize EGL.\n");
         return false;
     }
 
     eglBindAPI(EGL_OPENGL_ES_API);
 
-    return (eglGetError() == EGL_SUCCESS);
+	if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+		fprintf(stderr, "Failed to get ANGLE EGL display.\n");
+		return false;
+	}
+
+	if (!angle_eglInitialize(ctx_angle.dpy, NULL, NULL)) {
+		fprintf(stderr, "Failed to initialize ANGLE EGL.\n");
+		return false;
+	}
+
+	angle_eglBindAPI(EGL_OPENGL_ES_API);
+
+    return (eglGetError() == EGL_SUCCESS) && (angle_eglGetError() == EGL_SUCCESS);
 }
+
+static const EGLint
+attr_list[] = {
+	EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
+	EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+	EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
+	EGL_RED_SIZE, 8,
+	EGL_BLUE_SIZE, 8,
+	EGL_GREEN_SIZE, 8,
+	EGL_DEPTH_SIZE, 16,
+	EGL_STENCIL_SIZE, EGL_DONT_CARE,
+	EGL_NONE
+};
 
 static EGLConfig
 egl_choose_config()
 {
     // select an EGL configuration
-    EGLint attr_list[] = {
-        EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_DEPTH_SIZE, 16,
-        EGL_STENCIL_SIZE, EGL_DONT_CARE,
-        EGL_NONE
-    };
-
     EGLConfig config;
     EGLint num_configs;
-    if (!eglChooseConfig(egl_dpy, attr_list, &config, 1, &num_configs)) {
+    if (!eglChooseConfig(ctx_es.dpy, attr_list, &config, 1, &num_configs)) {
         fprintf(stderr, "Failed to find a suitable EGL config.\n");
         return 0;
     }
@@ -216,17 +233,31 @@ egl_choose_config()
     return config;
 }
 
-static bool
-angle_egl_create_context(EGL_ctx *ctx, EGLContext shared)
+static EGLConfig
+angle_egl_choose_config()
 {
-    EGLint ctx_atts[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
-        EGL_NONE };
+    // select an EGL configuration
+    EGLConfig config;
+    EGLint num_configs;
+    if (!angle_eglChooseConfig(ctx_angle.dpy, attr_list, &config, 1, &num_configs)) {
+        fprintf(stderr, "Failed to find a suitable EGL config.\n");
+        return 0;
+    }
 
-    ctx->ctx = angle_eglCreateContext(egl_dpy, ctx->config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+    return config;
+}
 
-    if (!ctx->ctx) {
-        fprintf(stderr, "Failed to create EGL context.\n");
+static EGLint ctx_atts[] = {
+	EGL_CONTEXT_CLIENT_VERSION, 2,
+	EGL_NONE };
+
+static bool
+angle_egl_create_context(EGLContext shared)
+{
+    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+
+    if (!ctx_angle.ctx) {
+        fprintf(stderr, "Failed to create EGL context %s.\n", __func__);
         return false;
     }
 
@@ -234,20 +265,16 @@ angle_egl_create_context(EGL_ctx *ctx, EGLContext shared)
 }
 
 static bool
-egl_create_context(EGL_ctx *ctx, EGLContext shared)
+egl_create_context(EGLContext shared)
 {
-    EGLint ctx_atts[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
-        EGL_NONE };
+    ctx_es.ctx = eglCreateContext(ctx_es.dpy, ctx_es.config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
 
-    ctx->ctx = eglCreateContext(egl_dpy, ctx->config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
-
-    if (!ctx->ctx) {
+    if (!ctx_es.ctx) {
         fprintf(stderr, "Failed to create EGL context.\n");
         return false;
     }
 
-    return (angle_eglGetError() == EGL_SUCCESS);
+    return (eglGetError() == EGL_SUCCESS);
 }
 
 Window
@@ -353,7 +380,8 @@ cleanup()
     gl_cleanup();
     // FIXME EGL
     // destroy context, surface, display
-    eglTerminate(egl_dpy);
+    eglTerminate(ctx_es.dpy);
+	angle_eglTerminate(ctx_angle.dpy);
 
     XDestroyWindow(xdpy, win);
     XCloseDisplay(xdpy);
@@ -363,7 +391,7 @@ static bool
 gl_init()
 {
     // Context that draws
-    eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
+    eglMakeCurrent(ctx_es.dpy, egl_surf, egl_surf, ctx_es.ctx);
     static const float vertices[] = {
         1.0, 1.0,
         1.0, 0.0,
@@ -379,7 +407,7 @@ gl_init()
     glClearColor(1.0, 1.0, 0.0, 1.0);
 
     // Context that creates the image
-    angle_eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_angle.ctx);
+    angle_eglMakeCurrent(ctx_angle.dpy, egl_surf, egl_surf, ctx_angle.ctx);
     // xor image
     unsigned char pixels[256 * 256 * 4];
     unsigned char *pptr = pixels;
@@ -422,7 +450,7 @@ static void
 display()
 {
     // make the EGL context current
-    eglMakeCurrent(egl_dpy, egl_surf, egl_surf, ctx_es.ctx);
+    eglMakeCurrent(ctx_es.dpy, egl_surf, egl_surf, ctx_es.ctx);
 
     glClear(GL_COLOR_BUFFER_BIT);
     bind_program(gl_prog);
@@ -434,7 +462,7 @@ display()
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    eglSwapBuffers(egl_dpy, egl_surf);
+    eglSwapBuffers(ctx_es.dpy, egl_surf);
 }
 
 static void

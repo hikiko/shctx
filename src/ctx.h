@@ -31,6 +31,7 @@
 #include <X11/Xlib.h>
 
 struct EGL_ctx {
+	EGLDisplay dpy;
     EGLContext ctx;
     EGLConfig config;
 };
