@@ -12,7 +12,9 @@
 #include <stdarg.h>
 #include <assert.h>
 
-#include <GLES2/gl2.h>
+#define GL_GLEXT_PROTOTYPES 1
+#include <GL/gl.h>
+#include <GL/glext.h>
 
 #if defined(unix) || defined(__unix__)
 #include <unistd.h>

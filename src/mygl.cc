@@ -16,6 +16,7 @@ PFNEGLCHOOSECONFIGPROC angle_eglChooseConfig;
 PFNEGLCREATECONTEXTPROC angle_eglCreateContext;
 PFNEGLTERMINATEPROC angle_eglTerminate;
 PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
+PFNEGLQUERYAPIPROC angle_eglQueryAPI;
 
 PFNGLGENBUFFERSPROC angle_glGenBuffers;
 PFNGLBINDBUFFERPROC angle_glBindBuffer;
@@ -76,6 +77,7 @@ bool mygl_init()
     LOAD_FUNC("eglCreateContext", PFNEGLCREATECONTEXTPROC, angle_eglCreateContext);
     LOAD_FUNC("eglTerminate", PFNEGLTERMINATEPROC, angle_eglTerminate);
     LOAD_FUNC("eglSwapBuffers", PFNEGLSWAPBUFFERSPROC, angle_eglSwapBuffers);
+    LOAD_FUNC("eglQueryAPI", PFNEGLQUERYAPIPROC, angle_eglQueryAPI);
 
 	if (!(gl_so = dlopen(ANGLEPATH "/libGLESv2.so", RTLD_LAZY))) {
 		fprintf(stderr, "Failed to open ANGLE GLESv2 library.\n");

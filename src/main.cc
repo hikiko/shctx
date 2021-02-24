@@ -196,10 +196,10 @@ static bool
 egl_init()
 {
     // create an EGL display
-    if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+    //if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
     // NOTE to myself:
     // following line I used in EGL/GLES2 example causes error in angle (see extensions):
-    //if ((ctx_es.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
+    if ((ctx_es.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get EGL display.\n");
         return false;
     }
@@ -208,8 +208,6 @@ egl_init()
         fprintf(stderr, "Failed to initialize EGL.\n");
         return false;
     }
-
-    eglBindAPI(EGL_OPENGL_ES_API);
 
     if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get ANGLE EGL display.\n");
@@ -221,27 +219,25 @@ egl_init()
         return false;
     }
 
-    angle_eglBindAPI(EGL_OPENGL_ES_API);
-
     return (eglGetError() == EGL_SUCCESS) && (angle_eglGetError() == EGL_SUCCESS);
 }
-
-static const EGLint
-attr_list[] = {
-    EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
-    EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-    EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
-    EGL_RED_SIZE, 8,
-    EGL_BLUE_SIZE, 8,
-    EGL_GREEN_SIZE, 8,
-    EGL_DEPTH_SIZE, 16,
-    EGL_STENCIL_SIZE, EGL_DONT_CARE,
-    EGL_NONE
-};
 
 static EGLConfig
 egl_choose_config()
 {
+    static const EGLint
+        attr_list[] = {
+            EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+            EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
+            EGL_RED_SIZE, 8,
+            EGL_BLUE_SIZE, 8,
+            EGL_GREEN_SIZE, 8,
+            EGL_DEPTH_SIZE, 16,
+            EGL_STENCIL_SIZE, EGL_DONT_CARE,
+            EGL_NONE
+        };
+
     // select an EGL configuration
     EGLConfig config;
     EGLint num_configs;
@@ -256,6 +252,19 @@ egl_choose_config()
 static EGLConfig
 angle_egl_choose_config()
 {
+    static const EGLint
+        attr_list[] = {
+            EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+            EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
+            EGL_RED_SIZE, 8,
+            EGL_BLUE_SIZE, 8,
+            EGL_GREEN_SIZE, 8,
+            EGL_DEPTH_SIZE, 16,
+            EGL_STENCIL_SIZE, EGL_DONT_CARE,
+            EGL_NONE
+        };
+
     // select an EGL configuration
     EGLConfig config;
     EGLint num_configs;
@@ -274,6 +283,21 @@ static EGLint ctx_atts[] = {
 static bool
 angle_egl_create_context(EGLContext shared)
 {
+    EGLenum api = angle_eglQueryAPI();
+
+    switch(api) {
+        case EGL_OPENGL_API:
+            printf("EGL opengl API\n");
+            break;
+        case EGL_OPENGL_ES_API:
+            printf("EGL opengl ES API\n");
+            break;
+        case EGL_NONE:
+        default:
+            printf("No API\n");
+            break;
+    }
+
     ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
 
     if (!ctx_angle.ctx) {
@@ -287,6 +311,7 @@ angle_egl_create_context(EGLContext shared)
 static bool
 egl_create_context(EGLContext shared)
 {
+    eglBindAPI(EGL_OPENGL_API);
     ctx_es.ctx = eglCreateContext(ctx_es.dpy, ctx_es.config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
 
     if (!ctx_es.ctx) {
