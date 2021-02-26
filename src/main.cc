@@ -26,11 +26,13 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include "eglext_angle.h"
 
 #include <X11/Xlib.h>
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "ctx.h"
 #include "sdr.h"
@@ -81,7 +83,7 @@ static bool redraw_pending;
 int main(int argc, char **argv)
 {
     if (!init()) {
-        fprintf(stderr, "Failed to initialize EGL context.\n");
+        fprintf(stderr, "Failed to initialize EGL or ANGLE EGL context.\n");
         return 1;
     }
 
@@ -146,19 +148,22 @@ init()
     eglGetConfigAttrib(ctx_es.dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
 
     EGLint angle_vis_id;
-    angle_eglGetConfigAttrib(ctx_angle.dpy, ctx_angle.config, EGL_NATIVE_VISUAL_ID, &angle_vis_id);
+    angle_eglGetConfigAttrib(ctx_angle.dpy, ctx_angle.config, EGL_X11_VISUAL_ID_ANGLE, &angle_vis_id);
 
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
     /////////////////////////////////////////////////////////////
     win = x_create_window(vis_id, 800, 600);
     if (!win) {
+        fprintf(stderr, "EGL x_create_window\n");
         return false;
     }
     XMapWindow(xdpy, win);
+    XSync(xdpy, 0);
 
     hidden_win = x_create_window(angle_vis_id, 800, 600);
     if (!hidden_win) {
+        fprintf(stderr, "ANGLE x_create_window\n");
         return false;
     }
     XSync(xdpy, 0);
@@ -195,6 +200,37 @@ init()
 static bool
 egl_init()
 {
+    const char *client_extensions = angle_eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+    if (!client_extensions) {
+        fprintf(stderr, "ANGLE EGL extensions not found.\n");
+        return false;
+    }
+
+    if (!strstr(client_extensions, "ANGLE_platform_angle")) {
+        fprintf(stderr, "ANGLE_platform_angle extension not found.\n");
+        return false;
+    }
+
+    if (!strstr(client_extensions, "EGL_ANGLE_platform_angle_opengl")) {
+        fprintf(stderr, "EGL_ANGLE_platform_angle_opengl not found");
+        return false;
+    }
+
+    if (!strstr(client_extensions, "EGL_ANGLE_platform_angle_device_type_egl")) {
+        fprintf(stderr, "EGL_ANGLE_platform_angle_device_type_egl not found.\n");
+        return false;
+    }
+
+    if (!strstr(client_extensions, "EGL_EXT_platform_base")) {
+        fprintf(stderr, "EGL_EXT_platform_base not found.\n");
+        return false;
+    }
+
+    if (!strstr(client_extensions, "ANGLE_x11_visual")) {
+        fprintf(stderr, "ANGLE_x11_visual not found.\n");
+        return false;
+    }
+
     // create an EGL display
     //if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
     // NOTE to myself:
@@ -209,8 +245,15 @@ egl_init()
         return false;
     }
 
-    if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
-        fprintf(stderr, "Failed to get ANGLE EGL display.\n");
+    static const EGLAttrib angle_atts[] = {
+        EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_EGL_ANGLE,
+        EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
+        EGL_NONE
+    };
+
+    if ((ctx_angle.dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void *)xdpy, angle_atts)) == EGL_NO_DISPLAY) {
+    //if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+        fprintf(stderr, "Failed to get ANGLE EGL display : error : %s.\n", eglGetError() != EGL_SUCCESS ? "yes" : "no");
         return false;
     }
 
