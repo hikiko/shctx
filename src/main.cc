@@ -142,13 +142,25 @@ init()
         return false;
     }
 
+    /* create EGL context */
+    if (!egl_create_context(0)) {
+        return false;
+    }
+
+    /* create ANGLE context */
+    if (!angle_egl_create_context(/*ctx_es.ctx*/ 0)) {
+        return false;
+    }
+
     // On WebKit we will draw to textures so we won't need to mess with
     // visuals. For THIS test we need it for each X11 win
     EGLint vis_id;
     eglGetConfigAttrib(ctx_es.dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
+    printf("NATIVE visual id: %d\n", vis_id);
 
     EGLint angle_vis_id;
-    angle_eglGetConfigAttrib(ctx_angle.dpy, ctx_angle.config, EGL_X11_VISUAL_ID_ANGLE, &angle_vis_id);
+    angle_eglGetConfigAttrib(ctx_angle.dpy, ctx_angle.config, EGL_NATIVE_VISUAL_ID, &angle_vis_id);
+    printf("ANGLE visual id: %d\n", angle_vis_id);
 
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
@@ -180,16 +192,6 @@ init()
     ctx_angle.surf = angle_eglCreateWindowSurface(ctx_angle.dpy, ctx_angle.config, hidden_win, 0);
     if (ctx_angle.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create ANGLE EGL surface for hidden win.\n");
-        return false;
-    }
-
-    /* create EGL context */
-    if (!egl_create_context(0)) {
-        return false;
-    }
-
-    /* create ANGLE context */
-    if (!angle_egl_create_context(ctx_es.ctx)) {
         return false;
     }
 
@@ -299,7 +301,7 @@ angle_egl_choose_config()
         attr_list[] = {
             EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
             EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
+            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
             EGL_RED_SIZE, 8,
             EGL_BLUE_SIZE, 8,
             EGL_GREEN_SIZE, 8,
@@ -316,16 +318,27 @@ angle_egl_choose_config()
         return 0;
     }
 
+    EGLint err = angle_eglGetError();
+    if (err != EGL_SUCCESS) {
+        fprintf(stderr, "Error in %s: 0x%x\n", __func__, err);
+        return 0;
+    }
     return config;
 }
 
 static EGLint ctx_atts[] = {
     EGL_CONTEXT_CLIENT_VERSION, 2,
+//    EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
     EGL_NONE };
 
 static bool
 angle_egl_create_context(EGLContext shared)
 {
+    static EGLint angle_ctx_atts[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        // EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
+        EGL_NONE };
+
     EGLenum api = angle_eglQueryAPI();
 
     switch(api) {
@@ -341,21 +354,40 @@ angle_egl_create_context(EGLContext shared)
             break;
     }
 
-    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, shared, angle_ctx_atts);
 
     if (!ctx_angle.ctx) {
-        fprintf(stderr, "Failed to create ANGLE EGL context %s.\n", __func__);
+        fprintf(stderr, "Failed to create ANGLE EGL context %s. Error:\n", __func__);
+        EGLint err = angle_eglGetError();
+        switch (err) {
+        case EGL_BAD_MATCH:
+            fprintf(stderr, "BAD CONTEXT: current rendering API is EGL NONE?\n");
+            break;
+        case EGL_BAD_ATTRIBUTE:
+            fprintf(stderr, "BAD ATTRIBUTE: one or more attributes in %s are wrong\n", __func__);
+            break;
+        case EGL_SUCCESS:
+            fprintf(stderr, "EGL_SUCCESS after ANGLE create context.\n");
+            break;
+        case EGL_BAD_CONFIG:
+            fprintf(stderr, "EGL_BAD_CONFIG: in angle create context\n");
+            break;
+        default:
+            fprintf(stderr, "EGL error code: 0x%x\n", err);
+            break;
+        };
+
         return false;
     }
 
-    return (angle_eglGetError() == EGL_SUCCESS);
+    return true;
 }
 
 static bool
 egl_create_context(EGLContext shared)
 {
     eglBindAPI(EGL_OPENGL_API);
-    ctx_es.ctx = eglCreateContext(ctx_es.dpy, ctx_es.config, shared ? shared : EGL_NO_CONTEXT, ctx_atts);
+    ctx_es.ctx = eglCreateContext(ctx_es.dpy, ctx_es.config, shared, ctx_atts);
 
     if (!ctx_es.ctx) {
         fprintf(stderr, "Failed to create EGL context.\n");
