@@ -498,16 +498,16 @@ static void
 cleanup()
 {
     gl_cleanup();
-    // FIXME EGL
-    // destroy context, surface, display
-    eglDestroySurface(ctx_es.dpy, &ctx_es.surf);
+
+    /* because ANGLE backend is EGL, cleanup angle* first */
     angle_eglDestroySurface(ctx_angle.dpy, &ctx_angle.surf);
+    eglDestroySurface(ctx_es.dpy, &ctx_es.surf);
 
-    eglDestroyContext(ctx_es.dpy, &ctx_es.ctx);
     angle_eglDestroyContext(ctx_angle.dpy, &ctx_angle.ctx);
+    eglDestroyContext(ctx_es.dpy, &ctx_es.ctx);
 
-    eglTerminate(ctx_es.dpy);
     angle_eglTerminate(ctx_angle.dpy);
+    eglTerminate(ctx_es.dpy);
 
     XDestroyWindow(xdpy, win);
     XCloseDisplay(xdpy);
@@ -566,10 +566,9 @@ static void
 gl_cleanup()
 {
     free_program(gl_prog);
-    angle_glBindTexture(GL_TEXTURE_2D, 0);
 
+    angle_glBindTexture(GL_TEXTURE_2D, 0);
     angle_glDeleteTextures(1, &gl_tex);
-    free_program(gl_prog);
 }
 
 static void
@@ -578,15 +577,15 @@ display()
     // make the EGL context current
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
 
-    glClear(GL_COLOR_BUFFER_BIT);
-    bind_program(gl_prog);
-    glBindTexture(GL_TEXTURE_2D, gl_tex);
+    //bind_program(gl_prog);
+   // glBindTexture(GL_TEXTURE_2D, gl_tex);
     glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glClear(GL_COLOR_BUFFER_BIT);
 
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
 }
