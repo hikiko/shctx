@@ -18,6 +18,8 @@ extern PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
 extern PFNEGLQUERYAPIPROC angle_eglQueryAPI;
 extern PFNEGLQUERYSTRINGPROC angle_eglQueryString;
 extern PFNEGLGETPLATFORMDISPLAYPROC angle_eglGetPlatformDisplay;
+extern PFNEGLDESTROYCONTEXTPROC angle_eglDestroyContext;
+extern PFNEGLDESTROYSURFACEPROC angle_eglDestroySurface;
 
 extern PFNGLGENBUFFERSPROC angle_glGenBuffers;
 extern PFNGLBINDBUFFERPROC angle_glBindBuffer;

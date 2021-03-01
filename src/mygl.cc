@@ -19,6 +19,8 @@ PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
 PFNEGLQUERYAPIPROC angle_eglQueryAPI;
 PFNEGLQUERYSTRINGPROC angle_eglQueryString;
 PFNEGLGETPLATFORMDISPLAYPROC angle_eglGetPlatformDisplay;
+PFNEGLDESTROYCONTEXTPROC angle_eglDestroyContext;
+PFNEGLDESTROYSURFACEPROC angle_eglDestroySurface;
 
 PFNGLGENBUFFERSPROC angle_glGenBuffers;
 PFNGLBINDBUFFERPROC angle_glBindBuffer;
@@ -82,6 +84,8 @@ bool mygl_init()
     LOAD_FUNC("eglQueryAPI", PFNEGLQUERYAPIPROC, angle_eglQueryAPI);
     LOAD_FUNC("eglQueryString", PFNEGLQUERYSTRINGPROC, angle_eglQueryString);
     LOAD_FUNC("eglGetPlatformDisplay", PFNEGLGETPLATFORMDISPLAYPROC, angle_eglGetPlatformDisplay);
+    LOAD_FUNC("eglDestroyContext", PFNEGLDESTROYCONTEXTPROC, angle_eglDestroyContext);
+    LOAD_FUNC("eglDestroySurface", PFNEGLDESTROYSURFACEPROC, angle_eglDestroySurface);
 
 	if (!(gl_so = dlopen(ANGLEPATH "/libGLESv2.so", RTLD_LAZY))) {
 		fprintf(stderr, "Failed to open ANGLE GLESv2 library.\n");

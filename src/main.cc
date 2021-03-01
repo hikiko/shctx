@@ -500,6 +500,12 @@ cleanup()
     gl_cleanup();
     // FIXME EGL
     // destroy context, surface, display
+    eglDestroySurface(ctx_es.dpy, &ctx_es.surf);
+    angle_eglDestroySurface(ctx_angle.dpy, &ctx_angle.surf);
+
+    eglDestroyContext(ctx_es.dpy, &ctx_es.ctx);
+    angle_eglDestroyContext(ctx_angle.dpy, &ctx_angle.ctx);
+
     eglTerminate(ctx_es.dpy);
     angle_eglTerminate(ctx_angle.dpy);
 
