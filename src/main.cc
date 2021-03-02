@@ -147,7 +147,7 @@ init()
     }
 
     /* create ANGLE context */
-    if (!angle_egl_create_context(/*ctx_es.ctx*/ 0)) {
+    if (!angle_egl_create_context(ctx_es.ctx)) {
         return false;
     }
 
@@ -177,7 +177,7 @@ init()
         fprintf(stderr, "ANGLE x_create_window\n");
         return false;
     }
-    XMapWindow(xdpy, hidden_win);
+    //XMapWindow(xdpy, hidden_win);
     XSync(xdpy, 0);
 
     ////////////////////////////////////////////////////////////
@@ -575,14 +575,16 @@ gl_cleanup()
 static void
 display()
 {
+#if 0
     angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     angle_glClear(GL_COLOR_BUFFER_BIT);
     angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
     // make the EGL context current
+#endif
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
 
-    //bind_program(gl_prog);
-   // glBindTexture(GL_TEXTURE_2D, gl_tex);
+    bind_program(gl_prog);
+    glBindTexture(GL_TEXTURE_2D, gl_tex);
     glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
