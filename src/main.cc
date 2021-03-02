@@ -26,7 +26,7 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-//#include "eglext_angle.h"
+#include "eglext_angle.h"
 
 #include <X11/Xlib.h>
 
@@ -177,19 +177,24 @@ init()
         fprintf(stderr, "ANGLE x_create_window\n");
         return false;
     }
-    //XMapWindow(xdpy, hidden_win);
+    XMapWindow(xdpy, hidden_win);
     XSync(xdpy, 0);
 
     ////////////////////////////////////////////////////////////
 
+    const EGLint surf_atts[] = {
+        EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
+        EGL_NONE
+    };
+
     /* create EGL/ES surface */
-    ctx_es.surf = eglCreateWindowSurface(ctx_es.dpy, ctx_es.config, win, 0);
+    ctx_es.surf = eglCreateWindowSurface(ctx_es.dpy, ctx_es.config, win, surf_atts);
     if (ctx_es.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create EGL surface for win.\n");
         return false;
     }
 
-    ctx_angle.surf = angle_eglCreateWindowSurface(ctx_angle.dpy, ctx_angle.config, hidden_win, 0);
+    ctx_angle.surf = angle_eglCreateWindowSurface(ctx_angle.dpy, ctx_angle.config, hidden_win, surf_atts);
     if (ctx_angle.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create ANGLE EGL surface for hidden win.\n");
         return false;
@@ -249,15 +254,14 @@ egl_init()
         return false;
     }
 
-    /*
     static const EGLAttrib angle_atts[] = {
         EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_EGL_ANGLE,
         EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
         EGL_NONE
     };
-*/
-//    if ((ctx_angle.dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void *)xdpy, angle_atts)) == EGL_NO_DISPLAY) {
-    if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+
+    if ((ctx_angle.dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void *)xdpy, angle_atts)) == EGL_NO_DISPLAY) {
+//    if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get ANGLE EGL display : error : %s.\n", eglGetError() != EGL_SUCCESS ? "yes" : "no");
         return false;
     }
@@ -277,7 +281,7 @@ egl_choose_config()
         attr_list[] = {
             EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PIXMAP_BIT,
+            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
             EGL_RED_SIZE, 8,
             EGL_BLUE_SIZE, 8,
             EGL_GREEN_SIZE, 8,
@@ -357,7 +361,7 @@ angle_egl_create_context(EGLContext shared)
             break;
     }
 
-    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, shared, angle_ctx_atts);
+    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, 0, angle_ctx_atts);
 
     if (!ctx_angle.ctx) {
         fprintf(stderr, "Failed to create ANGLE EGL context %s. Error:\n", __func__);
@@ -575,14 +579,11 @@ gl_cleanup()
 static void
 display()
 {
-#if 0
     angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     angle_glClear(GL_COLOR_BUFFER_BIT);
-    angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
-    // make the EGL context current
-#endif
-    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
+    //angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
 
+    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
     bind_program(gl_prog);
     glBindTexture(GL_TEXTURE_2D, gl_tex);
     glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
@@ -592,7 +593,6 @@ display()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glClear(GL_COLOR_BUFFER_BIT);
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
-
 }
 
 static void
