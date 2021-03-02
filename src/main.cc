@@ -51,7 +51,7 @@ static bool egl_init();
 static bool egl_create_context(EGLContext shared);
 static bool angle_egl_create_context(EGLContext shared);
 
-static Window x_create_window(int vis_id, int win_w, int win_h);
+static Window x_create_window(int vis_id, int win_w, int win_h, const char *title);
 static bool handle_xevent(XEvent *ev);
 
 static bool gl_init();
@@ -165,7 +165,7 @@ init()
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
     /////////////////////////////////////////////////////////////
-    win = x_create_window(vis_id, 800, 600);
+    win = x_create_window(vis_id, 800, 600, "native egl");
     if (!win) {
         fprintf(stderr, "EGL x_create_window\n");
         return false;
@@ -173,11 +173,12 @@ init()
     XMapWindow(xdpy, win);
     XSync(xdpy, 0);
 
-    hidden_win = x_create_window(angle_vis_id, 800, 600);
+    hidden_win = x_create_window(angle_vis_id, 800, 600, "angle egl");
     if (!hidden_win) {
         fprintf(stderr, "ANGLE x_create_window\n");
         return false;
     }
+    XMapWindow(xdpy, hidden_win);
     XSync(xdpy, 0);
 
     ////////////////////////////////////////////////////////////
@@ -369,9 +370,6 @@ angle_egl_create_context(EGLContext shared)
         case EGL_SUCCESS:
             fprintf(stderr, "EGL_SUCCESS after ANGLE create context.\n");
             break;
-        case EGL_BAD_CONFIG:
-            fprintf(stderr, "EGL_BAD_CONFIG: in angle create context\n");
-            break;
         default:
             fprintf(stderr, "EGL error code: 0x%x\n", err);
             break;
@@ -398,7 +396,7 @@ egl_create_context(EGLContext shared)
 }
 
 Window
-x_create_window(int vis_id, int win_w, int win_h)
+x_create_window(int vis_id, int win_w, int win_h, const char *title)
 {
     Window win;
 
@@ -435,7 +433,6 @@ x_create_window(int vis_id, int win_w, int win_h)
 
     // Window title
     XTextProperty tex_prop;
-    const char *title = "Shared context proof of concept";
     XStringListToTextProperty((char**)&title, 1, &tex_prop);
     XSetWMName(xdpy, win, &tex_prop);
     XFree(tex_prop.value);
@@ -510,6 +507,7 @@ cleanup()
     eglTerminate(ctx_es.dpy);
 
     XDestroyWindow(xdpy, win);
+    XDestroyWindow(xdpy, hidden_win);
     XCloseDisplay(xdpy);
 }
 
@@ -559,6 +557,7 @@ gl_init()
     angle_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     angle_glFinish();
 
+    angle_glClearColor(0.0, 1.0, 0.0, 1.0);
     return angle_glGetError() == GL_NO_ERROR;
 }
 
@@ -588,6 +587,11 @@ display()
     glClear(GL_COLOR_BUFFER_BIT);
 
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
+
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    angle_glClear(GL_COLOR_BUFFER_BIT);
+
+    angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
 }
 
 static void
