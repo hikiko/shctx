@@ -26,7 +26,7 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include "eglext_angle.h"
+//#include "eglext_angle.h"
 
 #include <X11/Xlib.h>
 
@@ -87,7 +87,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
     if (!gl_init())
         return 1;
 
@@ -203,6 +202,7 @@ init()
 static bool
 egl_init()
 {
+/*
     const char *client_extensions = angle_eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     if (!client_extensions) {
         fprintf(stderr, "ANGLE EGL extensions not found.\n");
@@ -233,6 +233,7 @@ egl_init()
         fprintf(stderr, "ANGLE_x11_visual not found.\n");
         return false;
     }
+*/
 
     // create an EGL display
     //if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
@@ -248,14 +249,15 @@ egl_init()
         return false;
     }
 
+    /*
     static const EGLAttrib angle_atts[] = {
         EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_EGL_ANGLE,
         EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
         EGL_NONE
     };
-
-    if ((ctx_angle.dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void *)xdpy, angle_atts)) == EGL_NO_DISPLAY) {
-    //if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+*/
+//    if ((ctx_angle.dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void *)xdpy, angle_atts)) == EGL_NO_DISPLAY) {
+    if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get ANGLE EGL display : error : %s.\n", eglGetError() != EGL_SUCCESS ? "yes" : "no");
         return false;
     }
@@ -573,6 +575,9 @@ gl_cleanup()
 static void
 display()
 {
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    angle_glClear(GL_COLOR_BUFFER_BIT);
+    angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
     // make the EGL context current
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
 
@@ -582,16 +587,10 @@ display()
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glClear(GL_COLOR_BUFFER_BIT);
-
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
 
-    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
-    angle_glClear(GL_COLOR_BUFFER_BIT);
-
-    angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
 }
 
 static void
