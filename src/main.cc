@@ -155,11 +155,9 @@ init()
     // visuals. For THIS test we need it for each X11 win
     EGLint vis_id;
     eglGetConfigAttrib(ctx_es.dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
-    printf("NATIVE visual id: %d\n", vis_id);
 
     EGLint angle_vis_id;
     angle_eglGetConfigAttrib(ctx_angle.dpy, ctx_angle.config, EGL_NATIVE_VISUAL_ID, &angle_vis_id);
-    printf("ANGLE visual id: %d\n", angle_vis_id);
 
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
@@ -182,6 +180,11 @@ init()
 
     ////////////////////////////////////////////////////////////
 
+    const EGLint angle_surf_atts[] = {
+        EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
+        EGL_NONE
+    };
+
     const EGLint surf_atts[] = {
         EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
         EGL_NONE
@@ -194,7 +197,7 @@ init()
         return false;
     }
 
-    ctx_angle.surf = angle_eglCreateWindowSurface(ctx_angle.dpy, ctx_angle.config, hidden_win, surf_atts);
+    ctx_angle.surf = angle_eglCreateWindowSurface(ctx_angle.dpy, ctx_angle.config, hidden_win, angle_surf_atts);
     if (ctx_angle.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create ANGLE EGL surface for hidden win.\n");
         return false;
@@ -207,7 +210,6 @@ init()
 static bool
 egl_init()
 {
-/*
     const char *client_extensions = angle_eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
     if (!client_extensions) {
         fprintf(stderr, "ANGLE EGL extensions not found.\n");
@@ -238,7 +240,6 @@ egl_init()
         fprintf(stderr, "ANGLE_x11_visual not found.\n");
         return false;
     }
-*/
 
     // create an EGL display
     //if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
@@ -256,7 +257,7 @@ egl_init()
 
     static const EGLAttrib angle_atts[] = {
         EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_EGL_ANGLE,
-        EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
+        EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE,
         EGL_NONE
     };
 
@@ -280,7 +281,7 @@ egl_choose_config()
     static const EGLint
         attr_list[] = {
             EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
             EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
             EGL_RED_SIZE, 8,
             EGL_BLUE_SIZE, 8,
@@ -503,12 +504,6 @@ cleanup()
     gl_cleanup();
 
     /* because ANGLE backend is EGL, cleanup angle* first */
-    angle_eglDestroySurface(ctx_angle.dpy, &ctx_angle.surf);
-    eglDestroySurface(ctx_es.dpy, &ctx_es.surf);
-
-    angle_eglDestroyContext(ctx_angle.dpy, &ctx_angle.ctx);
-    eglDestroyContext(ctx_es.dpy, &ctx_es.ctx);
-
     angle_eglTerminate(ctx_angle.dpy);
     eglTerminate(ctx_es.dpy);
 
@@ -570,20 +565,28 @@ gl_init()
 static void
 gl_cleanup()
 {
-    free_program(gl_prog);
+    if (gl_prog)
+        free_program(gl_prog);
 
     angle_glBindTexture(GL_TEXTURE_2D, 0);
-    angle_glDeleteTextures(1, &gl_tex);
+    if (gl_tex)
+        angle_glDeleteTextures(1, &gl_tex);
 }
 
+static int ctr;
 static void
 display()
 {
-    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
-    angle_glClear(GL_COLOR_BUFFER_BIT);
-    //angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
-
+    /* angle caches the last context set by angle angle_eglMakeCurrent
+     * if that's the same with the new, it doesn't bother to actually call
+     * the real eglMakeCurrent. So, we make sure to invalidate the angle
+     * context before switching the real context ourselves to force
+     * angle to call system's eglMakeCurrent when we next call system's
+     * EGLMakeCurrent
+     */
+    angle_eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
+
     bind_program(gl_prog);
     glBindTexture(GL_TEXTURE_2D, gl_tex);
     glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
@@ -593,6 +596,11 @@ display()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glClear(GL_COLOR_BUFFER_BIT);
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
+
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    angle_glClear(GL_COLOR_BUFFER_BIT);
+    angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
+
 }
 
 static void

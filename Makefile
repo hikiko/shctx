@@ -9,7 +9,7 @@ lib = -L/home/eleni/igalia/install/lib
 inc = -I/home/eleni/igalia/install/include
 
 CXXFLAGS = -pedantic -Wall -g $(inc) -MMD -DANGLEPATH=\"$(libpath)\" -DANGLE
-LDFLAGS = $(lib) -lGL -lEGL -lX11 -ldl
+LDFLAGS = $(lib) -lGLESv2 -lEGL -lX11 -ldl
 
 $(bin): $(obj) Makefile
 	$(CXX) -o $@ $(obj) $(LDFLAGS)
