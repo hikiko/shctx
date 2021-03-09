@@ -242,10 +242,8 @@ egl_init()
     }
 
     // create an EGL display
-    //if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
-    // NOTE to myself:
-    // following line I used in EGL/GLES2 example causes error in angle (see extensions):
-    if ((ctx_es.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
+    if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
+  //  if ((ctx_es.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get EGL display.\n");
         return false;
     }
@@ -503,14 +501,11 @@ cleanup()
 {
     gl_cleanup();
 
-    /* because ANGLE backend is EGL, cleanup angle* first */
-    angle_eglDestroySurface(ctx_angle.dpy, &ctx_angle.surf);
-    eglDestroySurface(ctx_es.dpy, &ctx_es.surf);
-
-    angle_eglDestroyContext(ctx_angle.dpy, &ctx_angle.ctx);
-    eglDestroyContext(ctx_es.dpy, &ctx_es.ctx);
-
+    angle_eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     angle_eglTerminate(ctx_angle.dpy);
+
+    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
     eglTerminate(ctx_es.dpy);
 
     XDestroyWindow(xdpy, win);
@@ -522,6 +517,7 @@ static bool
 gl_init()
 {
     // Context that draws
+    angle_eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
     static const float vertices[] = {
         1.0, 1.0,
@@ -571,13 +567,15 @@ gl_init()
 static void
 gl_cleanup()
 {
-    free_program(gl_prog);
+    angle_eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
+    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
+    glDeleteProgram(gl_prog);
 
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     angle_glBindTexture(GL_TEXTURE_2D, 0);
     angle_glDeleteTextures(1, &gl_tex);
 }
 
-static int ctr;
 static void
 display()
 {
@@ -604,7 +602,6 @@ display()
     angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     angle_glClear(GL_COLOR_BUFFER_BIT);
     angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
-
 }
 
 static void
