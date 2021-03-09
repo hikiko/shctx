@@ -95,7 +95,7 @@ unsigned int create_shader(const char *src, unsigned int sdr_type)
 	assert(glGetError() == GL_NO_ERROR);
 
 	if(info_len) {
-		if((info_str = malloc(info_len + 1))) {
+		if((info_str = (char *)malloc(info_len + 1))) {
 			glGetShaderInfoLog(sdr, info_len, 0, info_str);
 			assert(glGetError() == GL_NO_ERROR);
 			info_str[info_len] = 0;
