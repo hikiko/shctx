@@ -168,14 +168,14 @@ init()
         return false;
     }
     XMapWindow(xdpy, win);
-    XSync(xdpy, 0);
+    //XSync(xdpy, 0);
 
     hidden_win = x_create_window(angle_vis_id, 800, 600, "angle egl");
     if (!hidden_win) {
         fprintf(stderr, "ANGLE x_create_window\n");
         return false;
     }
-    XMapWindow(xdpy, hidden_win);
+    //XMapWindow(xdpy, hidden_win);
     XSync(xdpy, 0);
 
     ////////////////////////////////////////////////////////////
@@ -259,12 +259,14 @@ egl_init()
         EGL_NONE
     };
 
+    printf("ANGLE EGL display\n");
     if ((ctx_angle.dpy = angle_eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void *)xdpy, angle_atts)) == EGL_NO_DISPLAY) {
 //    if ((ctx_angle.dpy = angle_eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get ANGLE EGL display : error : %s.\n", eglGetError() != EGL_SUCCESS ? "yes" : "no");
         return false;
     }
 
+    printf("ANGLE EGL initialize\n");
     if (!angle_eglInitialize(ctx_angle.dpy, NULL, NULL)) {
         fprintf(stderr, "Failed to initialize ANGLE EGL.\n");
         return false;
@@ -342,7 +344,10 @@ angle_egl_create_context(EGLContext shared)
 {
     static EGLint angle_ctx_atts[] = {
         EGL_CONTEXT_CLIENT_VERSION, 2,
-        // EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
+        EGL_NATIVE_SHARED_CONTEXT_ANGLE, EGL_TRUE,
+        EGL_DISPLAY_TEXTURE_SHARE_GROUP_ANGLE, EGL_FALSE,
+        EGL_DISPLAY_SEMAPHORE_SHARE_GROUP_ANGLE, EGL_FALSE,
+       // EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
         EGL_NONE };
 
     EGLenum api = angle_eglQueryAPI();
@@ -360,14 +365,15 @@ angle_egl_create_context(EGLContext shared)
             break;
     }
 
-    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, 0, angle_ctx_atts);
+    //eglMakeCurrent(ctx_es.dpy, 0, 0, ctx_es.ctx);
+    ctx_angle.ctx = angle_eglCreateContext(ctx_angle.dpy, ctx_angle.config, ctx_es.ctx, angle_ctx_atts);
 
     if (!ctx_angle.ctx) {
         fprintf(stderr, "Failed to create ANGLE EGL context %s. Error:\n", __func__);
         EGLint err = angle_eglGetError();
         switch (err) {
         case EGL_BAD_MATCH:
-            fprintf(stderr, "BAD CONTEXT: current rendering API is EGL NONE?\n");
+            fprintf(stderr, "EGL_BAD_MATCH!\n");
             break;
         case EGL_BAD_ATTRIBUTE:
             fprintf(stderr, "BAD ATTRIBUTE: one or more attributes in %s are wrong\n", __func__);
@@ -596,12 +602,14 @@ display()
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glClear(GL_COLOR_BUFFER_BIT);
+    //glClear(GL_COLOR_BUFFER_BIT);
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
 
+#if 0
     angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     angle_glClear(GL_COLOR_BUFFER_BIT);
     angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
+#endif
 }
 
 static void
