@@ -30,6 +30,7 @@
 
 #include <X11/Xlib.h>
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,6 +38,7 @@
 #include "ctx.h"
 #include "sdr.h"
 
+#define EGL_EGLEXT_PROTOTYPES 1
 #define GL_GLEXT_PROTOTYPES 1
 #include <GL/gl.h>
 #include <GL/glext.h>
@@ -71,6 +73,8 @@ static GLuint gl_tex;
 static unsigned int gl_prog;
 static GLuint gl_vbo;
 
+static GLuint angle_gl_tex;
+
 static int xscr;
 static Display *xdpy;
 static Window xroot;
@@ -86,6 +90,17 @@ static EGLint ctx_atts[] = {
     EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
     EGL_NONE };
 
+static int gl_tex_dmabuf_fd;
+
+struct tex_storage_metadata {
+    EGLint fourcc;
+    EGLint num_planes;
+    EGLuint64KHR modifiers;
+    EGLint offset;
+    EGLint stride;
+};
+static struct tex_storage_metadata gl_dma_info;
+static unsigned char pixels[256 * 256 * 4];
 
 int main(int argc, char **argv)
 {
@@ -152,7 +167,7 @@ init()
         return false;
     }
 
-    if (!egl_create_context(&ctx_angle, ctx_es.ctx, ctx_atts)) {
+    if (!egl_create_context(&ctx_angle, 0, ctx_atts)) {
         printf("ctx_angle failed\n");
         return false;
     }
@@ -167,6 +182,7 @@ init()
 
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
+    //return false;
     /////////////////////////////////////////////////////////////
     win = x_create_window(vis_id, 800, 600, "native egl");
     if (!win) {
@@ -408,10 +424,7 @@ gl_init()
     gl_prog = create_program_load("data/texmap.vert", "data/texmap.frag");
     glClearColor(1.0, 1.0, 0.0, 1.0);
 
-    // Context that creates the image
-    eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     // xor image
-    unsigned char pixels[256 * 256 * 4];
     unsigned char *pptr = pixels;
     for (int i = 0; i < 256; i++) {
         for (int j = 0; j < 256; j++) {
@@ -425,14 +438,72 @@ gl_init()
             *pptr++ = 255;
         }
     }
+
     glGenTextures(1, &gl_tex);
     glBindTexture(GL_TEXTURE_2D, gl_tex);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    glFinish();
+    // system egl we dont fill the image with pixels here! just creating it
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    glFlush();
+
+    // DMA-FIXME: create image
+    EGLImage img = eglCreateImage(ctx_es.dpy, ctx_es.ctx, EGL_GL_TEXTURE_2D, (EGLClientBuffer)(uint64_t)gl_tex, 0);
+    assert(img != EGL_NO_IMAGE);
+
+    PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC eglExportDMABUFImageQueryMESA =
+        (PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC)eglGetProcAddress("eglExportDMABUFImageQueryMESA");
+    PFNEGLEXPORTDMABUFIMAGEMESAPROC eglExportDMABUFImageMESA =
+        (PFNEGLEXPORTDMABUFIMAGEMESAPROC)eglGetProcAddress("eglExportDMABUFImageMESA");
+
+    EGLBoolean ret;
+    ret = eglExportDMABUFImageQueryMESA(ctx_es.dpy,
+                                        img,
+                                        &gl_dma_info.fourcc,
+                                        &gl_dma_info.num_planes,
+                                        &gl_dma_info.modifiers);
+    if (!ret) {
+        fprintf(stderr, "eglExportDMABUFImageQueryMESA failed.\n");
+        return false;
+    }
+    ret = eglExportDMABUFImageMESA(ctx_es.dpy,
+                                   img,
+                                   &gl_tex_dmabuf_fd,
+                                   &gl_dma_info.stride,
+                                   &gl_dma_info.offset);
+    if (!ret) {
+        fprintf(stderr, "eglExportDMABUFImageMESA failed.\n");
+        return false;
+    }
+
+    eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    EGLAttrib atts[] = {
+        // W, H used in TexImage2D above!
+        EGL_WIDTH, 256,
+        EGL_HEIGHT, 256,
+        EGL_LINUX_DRM_FOURCC_EXT, gl_dma_info.fourcc,
+        EGL_DMA_BUF_PLANE0_FD_EXT, gl_tex_dmabuf_fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
+        EGL_DMA_BUF_PLANE0_PITCH_EXT, gl_dma_info.stride,
+        EGL_NONE,
+    };
+    EGLImageKHR angle_img = eglCreateImage(ctx_angle.dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, (EGLClientBuffer)(uint64_t)0, atts);
+    assert(angle_img != EGL_NO_IMAGE);
+
+    PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES =
+        (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
+    assert(glEGLImageTargetTexture2DOES);
+
+    glGenTextures(1, &angle_gl_tex);
+    glBindTexture(GL_TEXTURE_2D, angle_gl_tex);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, angle_img);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 256, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     return glGetError() == GL_NO_ERROR;
 }
@@ -446,7 +517,6 @@ gl_cleanup()
     glDeleteTextures(1, &gl_tex);
 }
 
-static int ctr;
 static void
 display()
 {
@@ -457,7 +527,7 @@ display()
      * angle to call system's eglMakeCurrent when we next call system's
      * EGLMakeCurrent
      */
-   // eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
+    eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
 
     bind_program(gl_prog);
@@ -469,12 +539,11 @@ display()
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
 
-#if 0
     eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     glClear(GL_COLOR_BUFFER_BIT);
+    glBindTexture(GL_TEXTURE_2D, gl_tex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
-#endif
-
 }
 
 static void
