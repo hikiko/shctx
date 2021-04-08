@@ -26,7 +26,6 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include "eglext_angle.h"
 
 #include <X11/Xlib.h>
 
@@ -40,10 +39,8 @@
 
 #define EGL_EGLEXT_PROTOTYPES 1
 #define GL_GLEXT_PROTOTYPES 1
-#include <GL/gl.h>
-#include <GL/glext.h>
-
-// functions
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 static bool init();
 static void cleanup();
@@ -64,16 +61,15 @@ static void display();
 static void reshape(int w, int h);
 static bool keyboard(KeySym sym);
 
-// variables
 
-static EGL_ctx ctx_es;
-static EGL_ctx ctx_angle;
+static EGL_ctx ctxA;
+static EGL_ctx ctxB;
 
-static GLuint gl_tex;
+static GLuint texA;
 static unsigned int gl_prog;
 static GLuint gl_vbo;
 
-static GLuint angle_gl_tex;
+static GLuint texB;
 
 static int xscr;
 static Display *xdpy;
@@ -87,32 +83,30 @@ static bool redraw_pending;
 
 static EGLint ctx_atts[] = {
     EGL_CONTEXT_CLIENT_VERSION, 2,
-    EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
     EGL_NONE };
 
-static int gl_tex_dmabuf_fd;
+static int dmabuf_fd;
 
-struct tex_storage_metadata {
+struct tex_storage_info {
     EGLint fourcc;
     EGLint num_planes;
     EGLuint64KHR modifiers;
     EGLint offset;
     EGLint stride;
 };
-static struct tex_storage_metadata gl_dma_info;
+static struct tex_storage_info gl_dma_info;
 static unsigned char pixels[256 * 256 * 4];
 
 int main(int argc, char **argv)
 {
     if (!init()) {
-        fprintf(stderr, "Failed to initialize EGL or ANGLE EGL context.\n");
+        fprintf(stderr, "Failed to initialize contexts.\n");
         return 1;
     }
 
     if (!gl_init())
         return 1;
 
-    // event loop
     for (;;) {
         XEvent xev;
         XNextEvent(xdpy, &xev);
@@ -149,58 +143,49 @@ init()
     }
 
     /* select EGL/ES config */
-    ctx_es.config = egl_choose_config();
-    if (!ctx_es.config) {
-        fprintf(stderr, "bad ctx_es config\n");
+    ctxA.config = egl_choose_config();
+    if (!ctxA.config) {
+        fprintf(stderr, "bad ctxA config\n");
         return false;
     }
 
-    ctx_angle.config = egl_choose_config();
-    if (!ctx_angle.config) {
-        fprintf(stderr, "bad ctx_angle config\n");
+    ctxB.config = egl_choose_config();
+    if (!ctxB.config) {
+        fprintf(stderr, "bad ctxB config\n");
         return false;
     }
 
     /* create EGL context */
-    if (!egl_create_context(&ctx_es, 0, ctx_atts)) {
-        printf("ctx_es failed\n");
+    if (!egl_create_context(&ctxA, 0, ctx_atts)) {
+        printf("ctxA failed\n");
         return false;
     }
 
-    if (!egl_create_context(&ctx_angle, 0, ctx_atts)) {
-        printf("ctx_angle failed\n");
+    if (!egl_create_context(&ctxB, 0, ctx_atts)) {
+        printf("ctxB failed\n");
         return false;
     }
 
-    // On WebKit we will draw to textures so we won't need to mess with
-    // visuals. For THIS test we need it for each X11 win
     EGLint vis_id;
-    eglGetConfigAttrib(ctx_es.dpy, ctx_es.config, EGL_NATIVE_VISUAL_ID, &vis_id);
+    eglGetConfigAttrib(ctxA.dpy, ctxA.config, EGL_NATIVE_VISUAL_ID, &vis_id);
 
-    EGLint angle_vis_id;
-    eglGetConfigAttrib(ctx_angle.dpy, ctx_angle.config, EGL_NATIVE_VISUAL_ID, &angle_vis_id);
+    EGLint secondary_vis_id;
+    eglGetConfigAttrib(ctxB.dpy, ctxB.config, EGL_NATIVE_VISUAL_ID, &secondary_vis_id);
 
-    // NOTE to myself:
-    // create x window: this is going to be used by both contexts
-    //return false;
-    /////////////////////////////////////////////////////////////
-    win = x_create_window(vis_id, 800, 600, "native egl");
+    win = x_create_window(vis_id, 800, 600, "EGL/dma_buf experiment");
     if (!win) {
-        fprintf(stderr, "EGL x_create_window\n");
+        fprintf(stderr, "ctxA x_create_window failed.\n");
         return false;
     }
     XMapWindow(xdpy, win);
- //   XSync(xdpy, 0);
 
-    hidden_win = x_create_window(angle_vis_id, 800, 600, "angle egl");
+    hidden_win = x_create_window(secondary_vis_id, 800, 600, "angle egl");
     if (!hidden_win) {
-        fprintf(stderr, "ANGLE x_create_window\n");
+        fprintf(stderr, "ctxB x_create_window failed.\n");
         return false;
     }
-// XMapWindow(xdpy, hidden_win);
    XSync(xdpy, 0);
 
-    ////////////////////////////////////////////////////////////
 
     const EGLint surf_atts[] = {
         EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
@@ -208,14 +193,14 @@ init()
     };
 
     /* create EGL/ES surface */
-    ctx_es.surf = eglCreateWindowSurface(ctx_es.dpy, ctx_es.config, win, surf_atts);
-    if (ctx_es.surf == EGL_NO_SURFACE) {
+    ctxA.surf = eglCreateWindowSurface(ctxA.dpy, ctxA.config, win, surf_atts);
+    if (ctxA.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create EGL surface for win.\n");
         return false;
     }
 
-    ctx_angle.surf = eglCreateWindowSurface(ctx_angle.dpy, ctx_angle.config, hidden_win, surf_atts);
-    if (ctx_angle.surf == EGL_NO_SURFACE) {
+    ctxB.surf = eglCreateWindowSurface(ctxB.dpy, ctxB.config, hidden_win, surf_atts);
+    if (ctxB.surf == EGL_NO_SURFACE) {
         fprintf(stderr, "Failed to create ANGLE EGL surface for hidden win.\n");
         return false;
     }
@@ -227,31 +212,27 @@ init()
 static bool
 egl_init()
 {
-    // create an EGL display
-    //if ((ctx_es.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY)) == EGL_NO_DISPLAY) {
-    // NOTE to myself:
-    // following line I used in EGL/GLES2 example causes error in angle (see extensions):
-    if ((ctx_es.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
+    if ((ctxA.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get EGL display.\n");
         return false;
     }
 
-    if (!eglInitialize(ctx_es.dpy, NULL, NULL)) {
+    if (!eglInitialize(ctxA.dpy, NULL, NULL)) {
         fprintf(stderr, "Failed to initialize EGL.\n");
         return false;
     }
 
-    if ((ctx_angle.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
+    if ((ctxB.dpy = eglGetPlatformDisplay(EGL_PLATFORM_X11_EXT, (void *)xdpy, NULL)) == EGL_NO_DISPLAY) {
         fprintf(stderr, "Failed to get ANGLE EGL display : error : %s.\n", eglGetError() != EGL_SUCCESS ? "yes" : "no");
         return false;
     }
 
-    if (!eglInitialize(ctx_angle.dpy, NULL, NULL)) {
+    if (!eglInitialize(ctxB.dpy, NULL, NULL)) {
         fprintf(stderr, "Failed to initialize ANGLE EGL.\n");
         return false;
     }
 
-    return (eglGetError() == EGL_SUCCESS) && (eglGetError() == EGL_SUCCESS);
+    return (eglGetError() == EGL_SUCCESS);
 }
 
 static EGLConfig
@@ -260,7 +241,7 @@ egl_choose_config()
     static const EGLint
         attr_list[] = {
             EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER,
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
             EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
             EGL_RED_SIZE, 8,
             EGL_BLUE_SIZE, 8,
@@ -270,10 +251,9 @@ egl_choose_config()
             EGL_NONE
         };
 
-    // select an EGL configuration
     EGLConfig config;
     EGLint num_configs;
-    if (!eglChooseConfig(ctx_es.dpy, attr_list, &config, 1, &num_configs)) {
+    if (!eglChooseConfig(ctxA.dpy, attr_list, &config, 1, &num_configs)) {
         fprintf(stderr, "Failed to find a suitable EGL config.\n");
         return 0;
     }
@@ -315,7 +295,6 @@ x_create_window(int vis_id, int win_w, int win_h, const char *title)
     xattr.background_pixel = BlackPixel(xdpy, xscr);
     xattr.colormap = XCreateColormap(xdpy, xroot, vis_info->visual, AllocNone);
 
-    // create an X window
     win = XCreateWindow(xdpy, xroot,
                         0, 0, win_w, win_h,
                         0, vis_info->depth,
@@ -327,20 +306,15 @@ x_create_window(int vis_id, int win_w, int win_h, const char *title)
         return 0;
     }
 
-    // X events we receive
     XSelectInput(xdpy, win,
                  ExposureMask | StructureNotifyMask | KeyPressMask);
 
-    // Window title
     XTextProperty tex_prop;
     XStringListToTextProperty((char**)&title, 1, &tex_prop);
     XSetWMName(xdpy, win, &tex_prop);
     XFree(tex_prop.value);
 
-    // Window manager protocols
     XSetWMProtocols(xdpy, win, &xa_wm_del_win, 1);
-    //XMapWindow(xdpy, win);
-    //XSync(xdpy, 0);
 
     return win;
 }
@@ -394,11 +368,10 @@ handle_xevent(XEvent *ev)
 static void
 cleanup()
 {
-    printf("cleanup\n");
     gl_cleanup();
 
-    eglTerminate(ctx_es.dpy);
-    eglTerminate(ctx_angle.dpy);
+    eglTerminate(ctxA.dpy);
+    eglTerminate(ctxB.dpy);
 
     XDestroyWindow(xdpy, win);
     XDestroyWindow(xdpy, hidden_win);
@@ -408,22 +381,6 @@ cleanup()
 static bool
 gl_init()
 {
-    // Context that draws
-    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
-    static const float vertices[] = {
-        1.0, 1.0,
-        1.0, 0.0,
-        0.0, 1.0,
-        0.0, 0.0
-    };
-
-    glGenBuffers(1, &gl_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STATIC_DRAW);
-
-    gl_prog = create_program_load("data/texmap.vert", "data/texmap.frag");
-    glClearColor(1.0, 1.0, 0.0, 1.0);
-
     // xor image
     unsigned char *pptr = pixels;
     for (int i = 0; i < 256; i++) {
@@ -439,19 +396,33 @@ gl_init()
         }
     }
 
-    glGenTextures(1, &gl_tex);
-    glBindTexture(GL_TEXTURE_2D, gl_tex);
+    // Context A that draws
+    eglMakeCurrent(ctxA.dpy, ctxA.surf, ctxA.surf, ctxA.ctx);
+    static const float vertices[] = {
+        1.0, 1.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        0.0, 0.0
+    };
+
+    glGenBuffers(1, &gl_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STATIC_DRAW);
+
+    gl_prog = create_program_load("data/texmap.vert", "data/texmap.frag");
+    glClearColor(1.0, 1.0, 0.0, 1.0);
+
+    glGenTextures(1, &texA);
+    glBindTexture(GL_TEXTURE_2D, texA);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    // system egl we dont fill the image with pixels here! just creating it
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
     glFlush();
 
-    // DMA-FIXME: create image
-    EGLImage img = eglCreateImage(ctx_es.dpy, ctx_es.ctx, EGL_GL_TEXTURE_2D, (EGLClientBuffer)(uint64_t)gl_tex, 0);
-    assert(img != EGL_NO_IMAGE);
+    EGLImage imgA = eglCreateImage(ctxA.dpy, ctxA.ctx, EGL_GL_TEXTURE_2D, (EGLClientBuffer)(uint64_t)texA, 0);
+    assert(imgA != EGL_NO_IMAGE);
 
     PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC eglExportDMABUFImageQueryMESA =
         (PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC)eglGetProcAddress("eglExportDMABUFImageQueryMESA");
@@ -459,8 +430,8 @@ gl_init()
         (PFNEGLEXPORTDMABUFIMAGEMESAPROC)eglGetProcAddress("eglExportDMABUFImageMESA");
 
     EGLBoolean ret;
-    ret = eglExportDMABUFImageQueryMESA(ctx_es.dpy,
-                                        img,
+    ret = eglExportDMABUFImageQueryMESA(ctxA.dpy,
+                                        imgA,
                                         &gl_dma_info.fourcc,
                                         &gl_dma_info.num_planes,
                                         &gl_dma_info.modifiers);
@@ -468,9 +439,9 @@ gl_init()
         fprintf(stderr, "eglExportDMABUFImageQueryMESA failed.\n");
         return false;
     }
-    ret = eglExportDMABUFImageMESA(ctx_es.dpy,
-                                   img,
-                                   &gl_tex_dmabuf_fd,
+    ret = eglExportDMABUFImageMESA(ctxA.dpy,
+                                   imgA,
+                                   &dmabuf_fd,
                                    &gl_dma_info.stride,
                                    &gl_dma_info.offset);
     if (!ret) {
@@ -478,29 +449,29 @@ gl_init()
         return false;
     }
 
-    eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    // Context B that fills the texture texB with a XOR pattern
+    printf("Filling texB from ctxB with XOR pattern.\n");
+    eglMakeCurrent(ctxB.dpy, ctxB.surf, ctxB.surf, ctxB.ctx);
     EGLAttrib atts[] = {
         // W, H used in TexImage2D above!
         EGL_WIDTH, 256,
         EGL_HEIGHT, 256,
         EGL_LINUX_DRM_FOURCC_EXT, gl_dma_info.fourcc,
-        EGL_DMA_BUF_PLANE0_FD_EXT, gl_tex_dmabuf_fd,
-        EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
+        EGL_DMA_BUF_PLANE0_FD_EXT, dmabuf_fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT, gl_dma_info.offset,
         EGL_DMA_BUF_PLANE0_PITCH_EXT, gl_dma_info.stride,
         EGL_NONE,
     };
-    EGLImageKHR angle_img = eglCreateImage(ctx_angle.dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, (EGLClientBuffer)(uint64_t)0, atts);
-    assert(angle_img != EGL_NO_IMAGE);
+    EGLImageKHR imgB = eglCreateImage(ctxB.dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, (EGLClientBuffer)(uint64_t)0, atts);
+    assert(imgB != EGL_NO_IMAGE);
 
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES =
         (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
     assert(glEGLImageTargetTexture2DOES);
 
-    glGenTextures(1, &angle_gl_tex);
-    glBindTexture(GL_TEXTURE_2D, angle_gl_tex);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, angle_img);
+    glGenTextures(1, &texB);
+    glBindTexture(GL_TEXTURE_2D, texB);
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, imgB);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 256, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
@@ -511,39 +482,45 @@ gl_init()
 static void
 gl_cleanup()
 {
-    free_program(gl_prog);
+    eglMakeCurrent(ctxA.dpy, ctxA.surf, ctxA.surf, ctxA.ctx);
+    if (gl_prog)
+        free_program(gl_prog);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glDeleteTextures(1, &gl_tex);
+    glDeleteTextures(1, &texA);
+
+    eglMakeCurrent(ctxB.dpy, ctxB.surf, ctxB.surf, ctxB.ctx);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDeleteTextures(1, &texB);
 }
 
+static int ctx;
 static void
 display()
 {
-    /* angle caches the last context set by angle eglMakeCurrent
-     * if that's the same with the new, it doesn't bother to actually call
-     * the real eglMakeCurrent. So, we make sure to invalidate the angle
-     * context before switching the real context ourselves to force
-     * angle to call system's eglMakeCurrent when we next call system's
-     * EGLMakeCurrent
-     */
-    eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
-    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
+    // context A draws using texA, we should see the pattern we
+    // wrote in tex B
+    eglMakeCurrent(ctxA.dpy, ctxA.surf, ctxA.surf, ctxA.ctx);
+    if (++ctx == 1)
+        printf("Mapping texA from ctxA to the x11 window.\n");
 
     bind_program(gl_prog);
-    glBindTexture(GL_TEXTURE_2D, gl_tex);
+    glBindTexture(GL_TEXTURE_2D, texA);
     glBindBuffer(GL_ARRAY_BUFFER, gl_vbo);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
+    eglSwapBuffers(ctxA.dpy, ctxA.surf);
 
-    eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+#if 0
+    // If we need to re-write the pattern using ctxB
+    eglMakeCurrent(ctxB.dpy, ctxB.surf, ctxB.surf, ctxB.ctx);
     glClear(GL_COLOR_BUFFER_BIT);
-    glBindTexture(GL_TEXTURE_2D, gl_tex);
+    glBindTexture(GL_TEXTURE_2D, texB);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
+    eglSwapBuffers(ctxB.dpy, ctxB.surf);
+#endif
 }
 
 static void
