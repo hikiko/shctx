@@ -15,6 +15,8 @@ extern PFNEGLCHOOSECONFIGPROC angle_eglChooseConfig;
 extern PFNEGLCREATECONTEXTPROC angle_eglCreateContext;
 extern PFNEGLTERMINATEPROC angle_eglTerminate;
 extern PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
+extern PFNEGLCREATEIMAGEPROC angle_eglCreateImage;
+extern PFNEGLQUERYSTRINGPROC angle_eglQueryString;
 
 extern PFNGLGENBUFFERSPROC angle_glGenBuffers;
 extern PFNGLBINDBUFFERPROC angle_glBindBuffer;
