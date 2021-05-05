@@ -18,6 +18,7 @@ PFNEGLTERMINATEPROC angle_eglTerminate;
 PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
 PFNEGLCREATEIMAGEPROC angle_eglCreateImage;
 PFNEGLQUERYSTRINGPROC angle_eglQueryString;
+PFNEGLGETPLATFORMDISPLAYPROC angle_eglGetPlatformDisplay;
 
 PFNGLGENBUFFERSPROC angle_glGenBuffers;
 PFNGLBINDBUFFERPROC angle_glBindBuffer;
@@ -52,6 +53,8 @@ PFNGLGETPROGRAMINFOLOGPROC angle_glGetProgramInfoLog;
 PFNGLUSEPROGRAMPROC angle_glUseProgram;
 PFNGLGETINTEGERVPROC angle_glGetIntegerv;
 PFNGLUNIFORM1IPROC angle_glUniform1i;
+PFNGLTEXSUBIMAGE2DPROC angle_glTexSubImage2D;
+PFNGLEGLIMAGETARGETTEXTURE2DOESPROC angle_glEGLImageTargetTexture2DOES;
 
 #define LOAD_FUNC(name, type, func) \
 	if (!(func = (type)dlsym(so, name))) { \
@@ -80,6 +83,7 @@ bool mygl_init()
     LOAD_FUNC("eglSwapBuffers", PFNEGLSWAPBUFFERSPROC, angle_eglSwapBuffers);
     LOAD_FUNC("eglCreateImage", PFNEGLCREATEIMAGEPROC, angle_eglCreateImage);
     LOAD_FUNC("eglQueryString", PFNEGLQUERYSTRINGPROC, angle_eglQueryString);
+    LOAD_FUNC("eglGetPlatformDisplay", PFNEGLGETPLATFORMDISPLAYPROC, angle_eglGetPlatformDisplay);
 
 	if (!(gl_so = dlopen(ANGLEPATH "/libGLESv2.so", RTLD_LAZY))) {
 		fprintf(stderr, "Failed to open ANGLE GLESv2 library.\n");
@@ -121,6 +125,8 @@ bool mygl_init()
     LOAD_FUNC("glUseProgram", PFNGLUSEPROGRAMPROC, angle_glUseProgram);
     LOAD_FUNC("glGetIntegerv", PFNGLGETINTEGERVPROC, angle_glGetIntegerv);
     LOAD_FUNC("glUniform1i", PFNGLUNIFORM1IPROC, angle_glUniform1i);
+    LOAD_FUNC("glTexSubImage2D", PFNGLTEXSUBIMAGE2DPROC, angle_glTexSubImage2D);
+    LOAD_FUNC("glEGLImageTargetTexture2DOES", PFNGLEGLIMAGETARGETTEXTURE2DOESPROC, angle_glEGLImageTargetTexture2DOES);
 
 	return true;
 }

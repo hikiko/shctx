@@ -2,7 +2,12 @@
 #define MYGL_H_
 
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+
+#define EGL_EGLEXT_PROTOTYPES 1
+#define GL_GLEXT_PROTOTYPES 1
 
 extern PFNEGLMAKECURRENTPROC angle_eglMakeCurrent;
 extern PFNEGLGETCONFIGATTRIBPROC angle_eglGetConfigAttrib;
@@ -17,6 +22,7 @@ extern PFNEGLTERMINATEPROC angle_eglTerminate;
 extern PFNEGLSWAPBUFFERSPROC angle_eglSwapBuffers;
 extern PFNEGLCREATEIMAGEPROC angle_eglCreateImage;
 extern PFNEGLQUERYSTRINGPROC angle_eglQueryString;
+extern PFNEGLGETPLATFORMDISPLAYPROC angle_eglGetPlatformDisplay;
 
 extern PFNGLGENBUFFERSPROC angle_glGenBuffers;
 extern PFNGLBINDBUFFERPROC angle_glBindBuffer;
@@ -51,6 +57,8 @@ extern PFNGLGETPROGRAMINFOLOGPROC angle_glGetProgramInfoLog;
 extern PFNGLUSEPROGRAMPROC angle_glUseProgram;
 extern PFNGLGETINTEGERVPROC angle_glGetIntegerv;
 extern PFNGLUNIFORM1IPROC angle_glUniform1i;
+extern PFNGLTEXSUBIMAGE2DPROC  angle_glTexSubImage2D;
+extern PFNGLEGLIMAGETARGETTEXTURE2DOESPROC angle_glEGLImageTargetTexture2DOES;
 
 #ifdef __cplusplus
 bool mygl_init();
