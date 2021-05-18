@@ -49,7 +49,7 @@ static bool egl_init();
 static bool egl_create_context(EGLContext shared);
 static bool angle_egl_create_context(EGLContext shared);
 
-static Window x_create_window(int vis_id, int win_w, int win_h);
+static Window x_create_window(int vis_id, int win_w, int win_h, const char *title);
 static bool handle_xevent(XEvent *ev);
 
 static bool gl_init();
@@ -151,16 +151,17 @@ init()
     // NOTE to myself:
     // create x window: this is going to be used by both contexts
     /////////////////////////////////////////////////////////////
-    win = x_create_window(vis_id, 800, 600);
+    win = x_create_window(vis_id, 800, 600, "EGL window");
     if (!win) {
         return false;
     }
     XMapWindow(xdpy, win);
 
-    hidden_win = x_create_window(angle_vis_id, 800, 600);
+    hidden_win = x_create_window(angle_vis_id, 800, 600, "ANGLE EGL window");
     if (!hidden_win) {
         return false;
     }
+    XMapWindow(xdpy, hidden_win);
     XSync(xdpy, 0);
 
     ////////////////////////////////////////////////////////////
@@ -184,7 +185,7 @@ init()
     }
 
     /* create ANGLE context */
-    if (!angle_egl_create_context(ctx_es.ctx)) {
+    if (!angle_egl_create_context(0)) {
         return false;
     }
 
@@ -298,7 +299,7 @@ egl_create_context(EGLContext shared)
 }
 
 Window
-x_create_window(int vis_id, int win_w, int win_h)
+x_create_window(int vis_id, int win_w, int win_h, const char *title)
 {
     Window win;
 
@@ -335,7 +336,6 @@ x_create_window(int vis_id, int win_w, int win_h)
 
     // Window title
     XTextProperty tex_prop;
-    const char *title = "Shared context proof of concept";
     XStringListToTextProperty((char**)&title, 1, &tex_prop);
     XSetWMName(xdpy, win, &tex_prop);
     XFree(tex_prop.value);
@@ -426,8 +426,6 @@ gl_init()
     gl_prog = create_program_load("data/texmap.vert", "data/texmap.frag");
     glClearColor(1.0, 1.0, 0.0, 1.0);
 
-    // Context that creates the image
-    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
     // xor image
     unsigned char pixels[256 * 256 * 4];
     unsigned char *pptr = pixels;
@@ -444,31 +442,33 @@ gl_init()
         }
     }
 
-    angle_glGenTextures(1, &gl_tex);
-    angle_glBindTexture(GL_TEXTURE_2D, gl_tex);
+    glGenTextures(1, &gl_tex);
+    glBindTexture(GL_TEXTURE_2D, gl_tex);
 
-    angle_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    angle_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    angle_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    angle_glFinish();
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glFinish();
 
-    return angle_glGetError() == GL_NO_ERROR;
+    return glGetError() == GL_NO_ERROR;
 }
 
 static void
 gl_cleanup()
 {
+    eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
     free_program(gl_prog);
-    angle_glBindTexture(GL_TEXTURE_2D, 0);
 
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    angle_glBindTexture(GL_TEXTURE_2D, 0);
     angle_glDeleteTextures(1, &gl_tex);
-    free_program(gl_prog);
 }
 
 static void
 display()
 {
+    angle_eglMakeCurrent(ctx_angle.dpy, 0, 0, 0);
     // make the EGL context current
     eglMakeCurrent(ctx_es.dpy, ctx_es.surf, ctx_es.surf, ctx_es.ctx);
 
@@ -481,8 +481,13 @@ display()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
+    glFlush();
     eglSwapBuffers(ctx_es.dpy, ctx_es.surf);
+
+    angle_eglMakeCurrent(ctx_angle.dpy, ctx_angle.surf, ctx_angle.surf, ctx_angle.ctx);
+    angle_glClearColor(0.0, 1.0, 0.0, 1.0);
+    angle_glClear(GL_COLOR_BUFFER_BIT);
+    angle_eglSwapBuffers(ctx_angle.dpy, ctx_angle.surf);
 }
 
 static void
